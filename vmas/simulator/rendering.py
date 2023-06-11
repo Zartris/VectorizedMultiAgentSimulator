@@ -62,7 +62,6 @@ except ImportError:
         "'xvfb-run -s \"-screen 0 1400x900x24\" python <your_script.py>'"
     )
 
-
 if "Apple" in sys.version:
     if "DYLD_FALLBACK_LIBRARY_PATH" in os.environ:
         os.environ["DYLD_FALLBACK_LIBRARY_PATH"] += ":/usr/lib"
@@ -112,9 +111,6 @@ class Viewer(object):
         )
         self.window.on_close = self.window_closed_by_user
 
-        self.geoms = []
-        self.text_lines = []
-        self.onetime_geoms = []
         self.render_state = RenderStateSingleton()
         self.transform = Transform()
         self.bounds = None
@@ -143,15 +139,12 @@ class Viewer(object):
         )
 
     def add_geom(self, geom):
-        self.geoms.append(geom)
         self.render_state.geoms.append(geom)
 
     def add_onetime(self, geom):
-        self.onetime_geoms.append(geom)
         self.render_state.onetime_geoms.append(geom)
 
     def add_onetime_list(self, geoms):
-        self.onetime_geoms.extend(geoms)
         self.render_state.onetime_geoms.extend(geoms)
 
     def render(self, return_rgb_array=False):
@@ -161,12 +154,6 @@ class Viewer(object):
         self.window.switch_to()
         self.window.dispatch_events()
 
-        # self.transform.enable()
-        # for geom in self.geoms:
-        #     geom.render()
-        # for geom in self.onetime_geoms:
-        #     geom.render()
-        # self.transform.disable()
         self.transform.enable()
         for geom in self.render_state.geoms:
             geom.render()
@@ -177,8 +164,6 @@ class Viewer(object):
         pyglet.gl.glMatrixMode(pyglet.gl.GL_PROJECTION)
         pyglet.gl.glLoadIdentity()
         gluOrtho2D(0, self.width, 0, self.height)
-        # for geom in self.text_lines:
-        #     geom.render()
 
         for geom in self.render_state.text_lines:
             geom.render()
@@ -199,7 +184,6 @@ class Viewer(object):
 
         self.window.flip()
         self.render_state.onetime_geoms = []
-        self.onetime_geoms = []
         return arr
 
     # Convenience
@@ -432,13 +416,13 @@ class FilledPolygon(Geom):
 
 
 def render_function_util(
-    f: Callable,
-    plot_range: Union[
-        float, Tuple[float, float], Tuple[Tuple[float, float], Tuple[float, float]]
-    ],
-    precision: float = 0.01,
-    cmap_range: Optional[Tuple[float, float]] = None,
-    cmap_alpha: float = 1.0,
+        f: Callable,
+        plot_range: Union[
+            float, Tuple[float, float], Tuple[Tuple[float, float], Tuple[float, float]]
+        ],
+        precision: float = 0.01,
+        cmap_range: Optional[Tuple[float, float]] = None,
+        cmap_alpha: float = 1.0,
 ):
     geoms = []
 
@@ -599,6 +583,5 @@ class Grid(Geom):
             glVertex2f(-self.length / 2, point)
             glVertex2f(self.length / 2, point)
             glEnd()
-
 
 # ================================================================
