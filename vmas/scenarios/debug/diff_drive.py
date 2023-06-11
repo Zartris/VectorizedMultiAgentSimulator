@@ -59,22 +59,7 @@ class Scenario(BaseScenario):
 
             world.add_agent(agent)
 
-        self._init_text()
-
         return world
-
-    def _init_text(self):
-        from vmas.simulator import rendering
-
-        state = rendering.RenderStateSingleton()
-        # here the index an be customized to change the position of the text
-        offset = len(state.text_lines)
-
-        # I used a list here but you could also add variables:
-        self.custom_obs_text_index = 0 + offset
-        state.text_lines.append(rendering.TextLine(self.custom_obs_text_index))
-        self.custom_rew_text_index = 1 + offset
-        state.text_lines.append(rendering.TextLine(self.custom_rew_text_index))
 
     def reset_world_at(self, env_index: int = None):
         ScenarioUtils.spawn_entities_randomly(
@@ -117,14 +102,15 @@ class Scenario(BaseScenario):
 
     def extra_render(self, env_index: int = 0) -> "List[Geom]":
         from vmas.simulator import rendering
-        state = rendering.RenderStateSingleton()
+
+        geoms: List[Geom] = []
 
         # Agent rotation
         for agent in self.world.agents:
             color = Color.BLACK.value
             line = rendering.Line(
                 (0, 0),
-                (agent.shape.circumscribed_radius(), 0),
+                (0.1, 0),
                 width=1,
             )
             xform = rendering.Transform()
@@ -132,12 +118,9 @@ class Scenario(BaseScenario):
             xform.set_translation(*agent.state.pos[env_index])
             line.add_attr(xform)
             line.set_color(*color)
-            state.onetime_geoms.append(line)
+            geoms.append(line)
 
-        # DO NOT COMMIT THIS INTO MASTER, IT IS ONLY TO SHOW TEXT RENDER EXAMPLE
-        state.text_lines[self.custom_obs_text_index].set_text(f"custom obs text {random.randint(0, 100)}")
-        state.text_lines[self.custom_rew_text_index].set_text(f"custom rew text {random.randint(0, 100)}")
-        return []
+        return geoms
 
 
 if __name__ == "__main__":
