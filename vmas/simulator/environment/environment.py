@@ -8,9 +8,9 @@ from typing import List, Tuple, Callable, Optional, Union, Dict
 
 import numpy as np
 import torch
-import typing
 from gym import spaces
 from torch import Tensor
+
 from vmas.simulator.core import Agent, TorchVectorizedObject
 from vmas.simulator.scenario import BaseScenario
 import vmas.simulator.utils
@@ -23,9 +23,6 @@ from vmas.simulator.utils import (
     DEVICE_TYPING,
     override,
 )
-
-if typing.TYPE_CHECKING:
-    from vmas.simulator.rendering import Viewer
 
 
 # environment for all agents in the multiagent world
@@ -65,11 +62,10 @@ class Environment(TorchVectorizedObject):
         self.observation_space = self.get_observation_space()
 
         # rendering
-        self.render_geoms_xform = None
-        self.render_geoms = None
-        self.viewer: Viewer = None
+        self.viewer = None
         self.headless = None
         self.visible_display = None
+        self.text_lines = None
 
     def reset(
         self,
@@ -554,29 +550,7 @@ class Environment(TorchVectorizedObject):
                 self.headless = False
             pyglet.options["headless"] = self.headless
 
-            self._init_rendering(env_index)
-
-        # Render comm messages
-        text_idx = 0
-        if self.world.dim_c > 0:
-            for agent in self.world.agents:
-                if agent.silent:
-                    continue
-                assert (
-                    agent.state.c is not None
-                ), "Agent has no comm state but it should"
-                if self.continuous_actions:
-                    word = (
-                        "["
-                        + ",".join([f"{comm:.2f}" for comm in agent.state.c[env_index]])
-                        + "]"
-                    )
-                else:
-                    word = ALPHABET[torch.argmax(agent.state.c[env_index]).item()]
-
-                message = agent.name + " sends " + word + "   "
-                self.viewer.text_lines[text_idx].set_text(message)
-                text_idx += 1
+            self._init_rendering()
 
         zoom = max(VIEWER_MIN_ZOOM, self.scenario.viewer_zoom)
 
@@ -622,16 +596,22 @@ class Environment(TorchVectorizedObject):
                 pos[Y] - cam_range[Y],
                 pos[Y] + cam_range[Y],
             )
-        from vmas.simulator.rendering import Grid
+
+        # Render
+        self._set_agent_comm_messages(env_index)
 
         if plot_position_function is not None:
-            self.plot_function(
-                plot_position_function,
-                precision=plot_position_function_precision,
-                plot_range=plot_position_function_range,
-                cmap_range=plot_position_function_cmap_range,
-                cmap_alpha=plot_position_function_cmap_alpha,
+            self.viewer.add_onetime(
+                self.plot_function(
+                    plot_position_function,
+                    precision=plot_position_function_precision,
+                    plot_range=plot_position_function_range,
+                    cmap_range=plot_position_function_cmap_range,
+                    cmap_alpha=plot_position_function_cmap_alpha,
+                )
             )
+
+        from vmas.simulator.rendering import Grid
 
         if self.scenario.plot_grid:
             grid = Grid(spacing=self.scenario.grid_spacing)
@@ -657,29 +637,54 @@ class Environment(TorchVectorizedObject):
                 y_max + precision,
             ]
 
-        geoms = render_function_util(
+        geom = render_function_util(
             f=f,
             precision=precision,
             plot_range=plot_range,
             cmap_range=cmap_range,
             cmap_alpha=cmap_alpha,
         )
-        self.viewer.add_onetime_list(geoms)
+        return geom
 
-    def _init_rendering(self, env_index):
+    def _init_rendering(self):
         from vmas.simulator import rendering
 
         self.viewer = rendering.Viewer(
             *self.scenario.viewer_size, visible=self.visible_display
         )
 
-        self.viewer.text_lines = []
+        self.text_lines = []
         idx = 0
         if self.world.dim_c > 0:
             for agent in self.world.agents:
                 if not agent.silent:
-                    text_line = rendering.TextLine(idx)
-                    self.viewer.text_lines.append(text_line)
+                    text_line = rendering.TextLine(y=idx * 40)
+                    self.viewer.geoms.append(text_line)
+                    self.text_lines.append(text_line)
+                    idx += 1
+
+    def _set_agent_comm_messages(self, env_index: int):
+        # Render comm messages
+        if self.world.dim_c > 0:
+            idx = 0
+            for agent in self.world.agents:
+                if not agent.silent:
+                    assert (
+                        agent.state.c is not None
+                    ), "Agent has no comm state but it should"
+                    if self.continuous_actions:
+                        word = (
+                            "["
+                            + ",".join(
+                                [f"{comm:.2f}" for comm in agent.state.c[env_index]]
+                            )
+                            + "]"
+                        )
+                    else:
+                        word = ALPHABET[torch.argmax(agent.state.c[env_index]).item()]
+
+                    message = agent.name + " sends " + word + "   "
+                    self.text_lines[idx].set_text(message)
                     idx += 1
 
     @override(TorchVectorizedObject)

@@ -37,12 +37,12 @@ class InteractiveEnv:
     """
 
     def __init__(
-            self,
-            env: GymWrapper,
-            control_two_agents: bool = False,
-            display_info: bool = True,
-            save_render: bool = False,
-            render_name: str = "interactive",
+        self,
+        env: GymWrapper,
+        control_two_agents: bool = False,
+        display_info: bool = True,
+        save_render: bool = False,
+        render_name: str = "interactive",
     ):
         self.env = env
         self.control_two_agents = control_two_agents
@@ -68,10 +68,13 @@ class InteractiveEnv:
 
         if self.control_two_agents:
             assert (
-                    self.n_agents >= 2
+                self.n_agents >= 2
             ), "Control_two_agents is true but not enough agents in scenario"
 
+        self.text_lines = []
+        self.font_size = 15
         self.env.render()
+        self.text_idx = len(self.env.unwrapped().text_lines)
         self._init_text()
         self.env.unwrapped().viewer.window.on_key_press = self._key_press
         self.env.unwrapped().viewer.window.on_key_release = self._key_release
@@ -103,39 +106,39 @@ class InteractiveEnv:
                 for agent in self.agents
             ]
             action_list[self.current_agent_index] = self.u[
-                                                    : self.env.unwrapped().get_agent_action_size(
-                                                        self.agents[self.current_agent_index]
-                                                    )
-                                                    ]
+                : self.env.unwrapped().get_agent_action_size(
+                    self.agents[self.current_agent_index]
+                )
+            ]
 
             if self.n_agents > 1 and self.control_two_agents:
                 action_list[self.current_agent_index2] = self.u2[
-                                                         : self.env.unwrapped().get_agent_action_size(
-                                                             self.agents[self.current_agent_index2]
-                                                         )
-                                                         ]
+                    : self.env.unwrapped().get_agent_action_size(
+                        self.agents[self.current_agent_index2]
+                    )
+                ]
             obs, rew, done, info = self.env.step(action_list)
 
             if self.display_info:
                 # TODO: Determine number of lines of obs_str and render accordingly
                 obs_str = str(InteractiveEnv.format_obs(obs[self.current_agent_index]))
                 message = f"\t\t{obs_str[len(obs_str) // 2:]}"
-                self._write_values(self.text_idx, message)
+                self._write_values(0, message)
                 message = f"Obs: {obs_str[:len(obs_str) // 2]}"
-                self._write_values(self.text_idx + 1, message)
+                self._write_values(1, message)
 
-                message = f"Rew: {round(rew[self.current_agent_index], 3)}"
-                self._write_values(self.text_idx + 2, message)
+                message = f"Rew: {round(rew[self.current_agent_index],3)}"
+                self._write_values(2, message)
 
                 total_rew = list(map(add, total_rew, rew))
                 message = f"Total rew: {round(total_rew[self.current_agent_index], 3)}"
-                self._write_values(self.text_idx + 3, message)
+                self._write_values(3, message)
 
                 message = f"Done: {done}"
-                self._write_values(self.text_idx + 4, message)
+                self._write_values(4, message)
 
                 message = f"Selected: {self.env.unwrapped().agents[self.current_agent_index].name}"
-                self._write_values(self.text_idx + 5, message)
+                self._write_values(5, message)
 
             frame = self.env.render(
                 mode="rgb_array" if self.save_render else "human",
@@ -149,25 +152,16 @@ class InteractiveEnv:
 
     def _init_text(self):
         from vmas.simulator import rendering
-        state = rendering.RenderStateSingleton()
-        self.text_idx = len(state.text_lines)
 
         for i in range(N_TEXT_LINES_INTERACTIVE):
             text_line = rendering.TextLine(
-                # self.env.unwrapped().viewer.window,
-                self.text_idx + i
+                y=(self.text_idx + i) * 40, font_size=self.font_size
             )
-            state.text_lines.append(text_line)
+            self.env.unwrapped().viewer.add_geom(text_line)
+            self.text_lines.append(text_line)
 
-    def _write_values(self, index: int, message: str, font_size: int = 15):
-        from vmas.simulator import rendering
-        rendering.RenderStateSingleton().text_lines[index].set_text(
-            message, font_size=font_size
-        )
-
-        # self.env.unwrapped().viewer.text_lines[index].set_text(
-        #     message, font_size=font_size
-        # )
+    def _write_values(self, index: int, message: str):
+        self.text_lines[index].set_text(message)
 
     # keyboard event callbacks
     def _key_press(self, k, mod):
@@ -303,11 +297,11 @@ class InteractiveEnv:
 
 
 def render_interactively(
-        scenario: Union[str, BaseScenario],
-        control_two_agents: bool = False,
-        display_info: bool = True,
-        save_render: bool = False,
-        **kwargs,
+    scenario: Union[str, BaseScenario],
+    control_two_agents: bool = False,
+    display_info: bool = True,
+    save_render: bool = False,
+    **kwargs,
 ):
     """
     Use this script to interactively play with scenarios
