@@ -123,7 +123,7 @@ def save_video(name: str, frame_list: List[np.array], fps: int):
 
 
 def x_to_rgb_colormap(
-    x: np.ndarray, low: float = None, high: float = None, alpha: float = 1.0
+        x: np.ndarray, low: float = None, high: float = None, alpha: float = 1.0
 ):
     res = VIRIDIS_CMAP.shape[0]
     if low is None:
@@ -180,7 +180,7 @@ class TorchUtils:
     @staticmethod
     def cross(vector_a: Tensor, vector_b: Tensor):
         return (
-            vector_a[:, X] * vector_b[:, Y] - vector_a[:, Y] * vector_b[:, X]
+                vector_a[:, X] * vector_b[:, Y] - vector_a[:, Y] * vector_b[:, X]
         ).unsqueeze(1)
 
     @staticmethod
@@ -202,13 +202,13 @@ class TorchUtils:
 class ScenarioUtils:
     @staticmethod
     def spawn_entities_randomly(
-        entities,
-        world,
-        env_index: int,
-        min_dist_between_entities: float,
-        x_bounds: Tuple[int, int],
-        y_bounds: Tuple[int, int],
-        occupied_positions: Tensor = None,
+            entities,
+            world,
+            env_index: int,
+            min_dist_between_entities: float,
+            x_bounds: Tuple[int, int],
+            y_bounds: Tuple[int, int],
+            occupied_positions: Tensor = None,
     ):
         batch_size = world.batch_dim if env_index is None else 1
 
@@ -231,12 +231,12 @@ class ScenarioUtils:
 
     @staticmethod
     def find_random_pos_for_entity(
-        occupied_positions: torch.Tensor,
-        env_index: int,
-        world,
-        min_dist_between_entities: float,
-        x_bounds: Tuple[int, int],
-        y_bounds: Tuple[int, int],
+            occupied_positions: torch.Tensor,
+            env_index: int,
+            world,
+            min_dist_between_entities: float,
+            x_bounds: Tuple[int, int],
+            y_bounds: Tuple[int, int],
     ):
         batch_size = world.batch_dim if env_index is None else 1
 
@@ -269,3 +269,20 @@ class ScenarioUtils:
             else:
                 break
         return pos
+
+    @staticmethod
+    def format_obs(obs, index: int = None):
+        if index is not None:
+            if isinstance(obs, Tensor):
+                return list(np.around(obs[index].cpu().tolist(), decimals=2))
+            elif isinstance(obs, Dict):
+                return {key: ScenarioUtils.format_obs(value, index) for key, value in obs.items()}
+            else:
+                raise NotImplementedError(f"Invalid type of observation {obs}")
+        else:
+            if isinstance(obs, Tensor):
+                return list(np.around(obs.cpu().tolist(), decimals=2))
+            elif isinstance(obs, Dict):
+                return {key: ScenarioUtils.format_obs(value) for key, value in obs.items()}
+            else:
+                raise NotImplementedError(f"Invalid type of observation {obs}")

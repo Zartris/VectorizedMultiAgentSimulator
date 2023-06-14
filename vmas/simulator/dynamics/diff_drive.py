@@ -40,7 +40,7 @@ class DiffDriveDynamics:
     def euler(self, f, rot):
         return f(rot)
 
-    def runge_kutta(self, f, rot):
+    def runge_kutta_force(self, f, rot):
         k1 = f(rot)
         k2 = f(rot + self.dt * k1[2] / 2)
         k3 = f(rot + self.dt * k2[2] / 2)
@@ -48,58 +48,25 @@ class DiffDriveDynamics:
 
         return (1 / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
 
-    def process_force(self):
-        """
-        Computing the force from the action given a differential drive agent.
-        """
-        print("NONONONONO")
-        u_forward = self.agent.action.u[:, vmas.simulator.utils.X]  # force in x direction
-
-        # compute magnitude of the velocity
-        cur_vel = self.agent.state.vel
-
-        # NOTE: The added velocity is just a scalar as it is constaint over all substeps
-        global_vel = self.agent.state.vel * (1 - self.drag)
-        local_vel_x = torch.cos(self.agent.state.rot) * global_vel[:, vmas.simulator.utils.X] \
-                      + torch.sin(self.agent.state.rot) * global_vel[:, vmas.simulator.utils.Y]
-        local_vel_y = -torch.sin(self.agent.state.rot) * global_vel[:, vmas.simulator.utils.X] \
-                      + torch.cos(self.agent.state.rot) * global_vel[:, vmas.simulator.utils.Y]
-
-        local_force_forward = local_vel_x * self.agent.mass
-        forward_force = local_force_forward.squeeze(-1) + u_forward
-        print("u:", u_forward, "forward_force:", forward_force)
-
-        u_rot = self.agent.action.u_rot.squeeze(-1)
-        angular_vel = u_rot + self.agent.state.ang_vel.squeeze(-1) * (1 - self.drag)
+    def runge_kutta_position(self, local_vel, angular_vel, sub_dt):
+        local_vel_x = local_vel[:, X].unsqueeze(-1)
+        local_vel_y = local_vel[:, Y].unsqueeze(-1)
+        current_ang_vel = angular_vel.unsqueeze(-1)
 
         def f(rot):
-            return torch.stack(
-                [forward_force * torch.cos(rot), forward_force * torch.sin(rot), angular_vel], dim=0
+            return torch.cat(
+                [sub_dt * (local_vel_x * torch.cos(rot) - local_vel_y * torch.sin(rot)),
+                 sub_dt * (local_vel_x * torch.sin(rot) + local_vel_y * torch.cos(rot)),
+                 sub_dt * current_ang_vel], dim=-1
             )
 
-        if self.integration == "euler":
-            u = self.euler(f, self.agent.state.rot.squeeze(-1))
-        else:
-            u = self.runge_kutta(f, self.agent.state.rot.squeeze(-1))
-
-        self.agent.action.u[:, vmas.simulator.utils.X] = u[vmas.simulator.utils.X]
-        self.agent.action.u[:, vmas.simulator.utils.Y] = u[vmas.simulator.utils.Y]
-
-    def runge_kutta_step(self, local_vel, angular_vel, sub_dt):
-        def f(rot):
-            return torch.stack(
-                [sub_dt * (local_vel[:, X] * torch.cos(rot) - local_vel[:, Y] * torch.sin(rot)),
-                 sub_dt * (local_vel[:, X] * torch.sin(rot) + local_vel[:, Y] * torch.cos(rot)),
-                 sub_dt * angular_vel], dim=0
-            ).squeeze(-1)
-
-        current_heading = self.agent.state.rot.squeeze(-1)
+        current_heading = self.agent.state.rot
         k1 = f(current_heading)
-        k2 = f(current_heading + k1[2] / 2)
-        k3 = f(current_heading + k2[2] / 2)
-        k4 = f(current_heading + k3[2])
+        k2 = f(current_heading + k1[:, 2].unsqueeze(-1) / 2)
+        k3 = f(current_heading + k2[:, 2].unsqueeze(-1) / 2)
+        k4 = f(current_heading + k3[:, 2].unsqueeze(-1))
 
-        return self.agent.state.pos + (1 / 6) * (k1 + 2 * k2 + 2 * k3 + k4)[:2]
+        return self.agent.state.pos + (1 / 6) * (k1 + 2 * k2 + 2 * k3 + k4)[:, :2]
 
     def integrate_state(self, force: Tensor, torque: Tensor, agent_index: int, substep_index: int, sub_dt: float,
                         world_drag: float,
@@ -125,28 +92,22 @@ class DiffDriveDynamics:
             local_vel += accel * sub_dt
             self.local_to_global(local_vel, out=self.agent.state.vel)
 
-            # accel = force[:, agent_index] / self.agent.mass
-
-            # self.agent.state.vel += accel * sub_dt
             if self.agent.max_speed is not None:
-                before = local_vel.clone()
                 local_vel = TorchUtils.clamp_with_norm(
                     local_vel, self.agent.max_speed
                 )
-                if not before.equal(local_vel):
-                    print(f"force was to big and we had to clamp it. Before: {before}, after: {local_vel}")
-                    debug = 0
+
             if self.agent.v_range is not None:
-                before = local_vel.clone()
+                # before = local_vel.clone()
                 local_vel = local_vel.clamp(
                     -self.agent.v_range, self.agent.v_range
                 )
-                if not before.equal(local_vel):
-                    debug = 0
+                # if not before.equal(local_vel):
+                #     debug = 0
             self.local_to_global(local_vel, out=self.agent.state.vel)
 
             # Use runge kutta to compute the position:
-            new_pos = self.runge_kutta_step(local_vel, self.agent.state.ang_vel.squeeze(-1), sub_dt)
+            new_pos = self.runge_kutta_position(local_vel, self.agent.state.ang_vel.squeeze(-1), sub_dt)
             # new_pos_t = self.agent.state.pos + self.agent.state.vel * sub_dt
             if x_semidim is not None:
                 new_pos[:, X] = torch.clamp(
@@ -169,19 +130,6 @@ class DiffDriveDynamics:
                                                 torque[:, agent_index] / self.agent.moment_of_inertia
                                         ) * sub_dt
             self.agent.state.rot += self.agent.state.ang_vel * sub_dt
-            # d_rot = self.agent.state.ang_vel * sub_dt
-            # # rotate current velocity to point in the direction of the new rotation
-            # # create the rotation matrix for each d_rot in the batch
-            # cos = torch.cos(d_rot)
-            # sin = torch.sin(d_rot)
-            # rot_matrix = torch.stack((cos, -sin, sin, cos), dim=2).view(self.world.batch_dim, 2, 2)
-            #
-            # # rotate the vel tensor for each sample in the batch
-            # vel_rotated = torch.bmm(rot_matrix, self.agent.state.vel.unsqueeze(-1)).squeeze(-1)
-            # self.agent.state.vel = vel_rotated
-            # final_orientations = torch.atan2(vel_rotated[:, 1], vel_rotated[:, 0])
-            # final_orientations_norm = (final_orientations + math.pi) % (2 * math.pi) - math.pi
-            # debug = 0
 
     def apply_action_force(self, force: Tensor, index: int, substep: int):
         if self.agent.movable:
@@ -218,13 +166,14 @@ class DiffDriveDynamics:
         sin_angle = torch.sin(self.agent.state.rot.squeeze(-1))
         cos_angle = torch.cos(self.agent.state.rot.squeeze(-1))
 
-        x_global_force = u[:, vmas.simulator.utils.X] * cos_angle \
-                         - u[:, vmas.simulator.utils.Y] * sin_angle
-        y_global_force = u[:, vmas.simulator.utils.X] * sin_angle \
-                         + u[:, vmas.simulator.utils.Y] * cos_angle
+        u_x = u[:, vmas.simulator.utils.X]
+        u_y = u[:, vmas.simulator.utils.Y]
 
-        out[:, vmas.simulator.utils.X] = x_global_force
-        out[:, vmas.simulator.utils.Y] = y_global_force
+        # x_global_force = u_x * cos_angle - u_y * sin_angle
+        # y_global_force = u_x * sin_angle + u_y * cos_angle
+
+        out[:, vmas.simulator.utils.X].copy_(u_x * cos_angle - u_y * sin_angle)
+        out[:, vmas.simulator.utils.Y].copy_(u_x * sin_angle + u_y * cos_angle)
         return out
 
     def global_to_local(self, u, out=None):
@@ -234,11 +183,13 @@ class DiffDriveDynamics:
         sin_angle = torch.sin(self.agent.state.rot.squeeze(-1))
         cos_angle = torch.cos(self.agent.state.rot.squeeze(-1))
 
-        x_local_force = u[:, vmas.simulator.utils.X] * cos_angle \
-                        + u[:, vmas.simulator.utils.Y] * sin_angle
-        y_local_force = -u[:, vmas.simulator.utils.X] * sin_angle \
-                        + u[:, vmas.simulator.utils.Y] * cos_angle
+        # x_local_force = u[:, vmas.simulator.utils.X] * cos_angle + u[:, vmas.simulator.utils.Y] * sin_angle
+        # y_local_force = -u[:, vmas.simulator.utils.X] * sin_angle + u[:, vmas.simulator.utils.Y] * cos_angle
 
-        out[:, vmas.simulator.utils.X] = x_local_force
-        out[:, vmas.simulator.utils.Y] = y_local_force
+        u_x = u[:, vmas.simulator.utils.X]
+        u_y = u[:, vmas.simulator.utils.Y]
+
+        out[:, vmas.simulator.utils.X].copy_(u_x * cos_angle + u_y * sin_angle)
+        out[:, vmas.simulator.utils.Y].copy_(-u_x * sin_angle + u_y * cos_angle)
+
         return out
