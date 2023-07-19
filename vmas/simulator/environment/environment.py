@@ -34,15 +34,15 @@ class Environment(TorchVectorizedObject):
     }
 
     def __init__(
-        self,
-        scenario: BaseScenario,
-        num_envs: int = 32,
-        device: DEVICE_TYPING = "cpu",
-        max_steps: Optional[int] = None,
-        continuous_actions: bool = True,
-        seed: Optional[int] = None,
-        dict_spaces: bool = False,
-        **kwargs,
+            self,
+            scenario: BaseScenario,
+            num_envs: int = 32,
+            device: DEVICE_TYPING = "cpu",
+            max_steps: Optional[int] = None,
+            continuous_actions: bool = True,
+            seed: Optional[int] = None,
+            dict_spaces: bool = False,
+            **kwargs,
     ):
         self.scenario = scenario
         self.num_envs = num_envs
@@ -58,7 +58,9 @@ class Environment(TorchVectorizedObject):
         self.reset(seed=seed)
 
         # configure spaces
+        # TODO:: change to control action space
         self.action_space = self.get_action_space()
+        self.control_action_space = self.get_control_action_space()
         self.observation_space = self.get_observation_space()
 
         # rendering
@@ -66,13 +68,14 @@ class Environment(TorchVectorizedObject):
         self.headless = None
         self.visible_display = None
         self.text_lines = None
+        self.use_inner_loop = kwargs.get("use_inner_loop", False)
 
     def reset(
-        self,
-        seed: Optional[int] = None,
-        return_observations: bool = True,
-        return_info: bool = False,
-        return_dones: bool = False,
+            self,
+            seed: Optional[int] = None,
+            return_observations: bool = True,
+            return_info: bool = False,
+            return_dones: bool = False,
     ):
         """
         Resets the environment in a vectorized way
@@ -93,11 +96,11 @@ class Environment(TorchVectorizedObject):
         return result[0] if result and len(result) == 1 else result
 
     def reset_at(
-        self,
-        index: int,
-        return_observations: bool = True,
-        return_info: bool = False,
-        return_dones: bool = False,
+            self,
+            index: int,
+            return_observations: bool = True,
+            return_info: bool = False,
+            return_dones: bool = False,
     ):
         """
         Resets the environment at index
@@ -117,12 +120,12 @@ class Environment(TorchVectorizedObject):
         return result[0] if result and len(result) == 1 else result
 
     def get_from_scenario(
-        self,
-        get_observations: bool,
-        get_rewards: bool,
-        get_infos: bool,
-        get_dones: bool,
-        dict_agent_names: Optional[bool] = None,
+            self,
+            get_observations: bool,
+            get_rewards: bool,
+            get_infos: bool,
+            get_dones: bool,
+            dict_agent_names: Optional[bool] = None,
     ):
         if not get_infos and not get_dones and not get_rewards and not get_observations:
             return
@@ -185,52 +188,40 @@ class Environment(TorchVectorizedObject):
             infos : List on len 'self.n_agents' of which each element is a dictionary for which each key is a metric
                     and the value is a tensor of shape '(self.num_envs, metric_size_per_agent)'
         """
-        if isinstance(actions, Dict):
-            actions_dict = actions
-            actions = []
-            for agent in self.agents:
-                try:
-                    actions.append(actions_dict[agent.name])
-                except KeyError:
-                    raise AssertionError(
-                        f"Agent '{agent.name}' not contained in action dict"
-                    )
-            assert (
-                len(actions_dict) == self.n_agents
-            ), f"Expecting actions for {self.n_agents}, got {len(actions_dict)} actions"
+        # Check format and convert actions to action list:
+        actions = self.check_action_input(actions)
 
-        assert (
-            len(actions) == self.n_agents
-        ), f"Expecting actions for {self.n_agents}, got {len(actions)} actions"
-        for i in range(len(actions)):
-            if not isinstance(actions[i], Tensor):
-                actions[i] = torch.tensor(
-                    actions[i], dtype=torch.float32, device=self.device
-                )
-            if len(actions[i].shape) == 1:
-                actions[i].unsqueeze_(-1)
-            assert (
-                actions[i].shape[0] == self.num_envs
-            ), f"Actions used in input of env must be of len {self.num_envs}, got {actions[i].shape[0]}"
-            assert actions[i].shape[1] == self.get_agent_action_size(self.agents[i]), (
-                f"Action for agent {self.agents[i].name} has shape {actions[i].shape[1]},"
-                f" but should have shape {self.get_agent_action_size(self.agents[i])}"
-            )
+        # in this project we are introducing a inner loop as we are feeding the simulator multiple actions together.
+        trajectories = []
+        for i, agent in enumerate(self.world.agents):
+            trajectory = self.scenario.env_process_action_input(agent, actions[i])
+            trajectories.append(trajectory)
+            # reset history
+            agent.pos_history = []
 
-        # set action for each agent
-        for i, agent in enumerate(self.agents):
-            self._set_action(actions[i], agent)
-        # Scenarios can define a custom action processor. This step takes care also of scripted agents automatically
+        # self.check_control_action_input(control_actions)
+        trajectories = torch.stack(trajectories)
+        if trajectories.dim() != 4:
+            trajectories.unsqueeze_(-2)
+        trajectories = torch.moveaxis(trajectories, 2, 0)  # (inner_batch, agent_ind, env_ind, action)
+
+        inner_epochs = 1 if actions.dim() != 4 else trajectories.shape[0]
+        obs = []
+        rewards = [torch.zeros(self.num_envs, device=self.device)] * self.n_agents
+        dones = []
+        infos = []
+        for inner_epoch in range(inner_epochs):
+            # extract the actions for this inner epoch
+            inner_obs, inner_rewards, inner_dones, inner_infos = self._step_inner(trajectories, inner_epoch)
+            obs.append(inner_obs)
+            for a_index in range(len(inner_rewards)):
+                rewards[a_index] += inner_rewards[a_index]
+            dones = inner_dones
+            infos.append(inner_infos)
+        debug = 0
         for agent in self.world.agents:
-            self.scenario.env_process_action(agent)
-
-        # advance world state
-        self.world.step()
-
-        self.steps += 1
-        obs, rewards, dones, infos = self.get_from_scenario(
-            get_observations=True, get_infos=True, get_rewards=True, get_dones=True
-        )
+            agent.pos_history = torch.stack(agent.pos_history)
+            agent.pos_history = agent.pos_history.swapaxes(0, 1)
 
         # print("\nStep results in unwrapped environment")
         # print(
@@ -250,11 +241,99 @@ class Environment(TorchVectorizedObject):
         # print(f"Info len (n_agents): {len(infos)}, info[0] (infos agent 0): {infos[0]}")
         return obs, rewards, dones, infos
 
+    def _step_inner(self, trajectories, inner_epoch):
+
+        # set action for each agent
+        for i, agent in enumerate(self.agents):
+            control_actions = self.scenario.convert_to_control_actions(agent, trajectories[:, i, :, :], inner_epoch)
+            self._set_control_action(control_actions, agent)
+        # Scenarios can define a custom action processor. This step takes care also of scripted agents automatically
+        for agent in self.world.agents:
+            self.scenario.env_process_action(agent)
+
+        # assert correct agent action size
+        # advance world state
+        self.world.step()
+
+        self.steps += 1
+        obs, rewards, dones, infos = self.get_from_scenario(
+            get_observations=True, get_infos=True, get_rewards=True, get_dones=True
+        )
+
+        for agent in self.world.agents:
+            agent.pos_history.append(agent.state.pos)
+
+        return obs, rewards, dones, infos
+
     def done(self):
         dones = self.scenario.done().clone()
         if self.max_steps is not None:
             dones += self.steps >= self.max_steps
         return dones
+
+    def check_action_input(self, actions):
+        if isinstance(actions, Dict):
+            actions_dict = actions
+            actions = []
+            for agent in self.agents:
+                try:
+                    actions.append(actions_dict[agent.name])
+                except KeyError:
+                    raise AssertionError(
+                        f"Agent '{agent.name}' not contained in action dict"
+                    )
+            assert (
+                    len(actions_dict) == self.n_agents
+            ), f"Expecting actions for {self.n_agents}, got {len(actions_dict)} actions"
+
+        # check if we have an action for each agent
+        assert (
+                len(actions) == self.n_agents
+        ), f"Expecting actions for {self.n_agents}, got {len(actions)} actions"
+
+        # check if actions are tensors and have the "correct" shape
+        for i in range(len(actions)):
+            if not isinstance(actions[i], Tensor):
+                actions[i] = torch.tensor(
+                    actions[i], dtype=torch.float32, device=self.device
+                )
+            if len(actions[i].shape) == 1:
+                actions[i].unsqueeze_(-1)
+            # check if actions have the correct shape
+            assert (
+                    actions[i].shape[0] == self.num_envs
+            ), f"Actions used in input of env must be of len {self.num_envs}, got {actions[i].shape[0]}"
+            # check if actions have the correct shape
+            assert actions[i].shape[1:] == self.get_agent_action_size(self.agents[i]), (
+                f"Action for agent {self.agents[i].name} has shape {actions[i].shape[1]},"
+                f" but should have shape {self.get_agent_action_size(self.agents[i])}"
+            )
+        return actions
+
+    def check_control_action_input(self, control_actions):
+        # check if actions are tensors and have the "correct" shape
+        # check if we have an action for each agent
+        assert (
+                len(control_actions) == self.n_agents
+        ), f"Expecting actions for {self.n_agents}, got {len(control_actions)} actions"
+
+        # check if actions are tensors and have the "correct" shape
+        for i in range(len(control_actions)):
+            if not isinstance(control_actions[i], Tensor):
+                control_actions[i] = torch.tensor(
+                    control_actions[i], dtype=torch.float32, device=self.device
+                )
+            if len(control_actions[i].shape) == 1:
+                control_actions[i].unsqueeze_(-1)
+            # check if actions have the correct shape
+            assert (
+                    control_actions[i].shape[0] == self.num_envs
+            ), f"Actions used as control input of env must be of len {self.num_envs}, got {control_actions[i].shape[0]}"
+            # check if actions have the correct shape
+            assert control_actions[i].shape[-1] == self.get_agent_control_action_size(self.agents[i]), (
+                f"Control action for agent {self.agents[i].name} has shape {control_actions[i].shape[1]},"
+                f" but should have shape {self.get_agent_control_action_size(self.agents[i])}"
+            )
 
     def get_action_space(self):
         if not self.dict_spaces:
@@ -265,6 +344,19 @@ class Environment(TorchVectorizedObject):
             return spaces.Dict(
                 {
                     agent.name: self.get_agent_action_space(agent)
+                    for agent in self.agents
+                }
+            )
+
+    def get_control_action_space(self):
+        if not self.dict_spaces:
+            return spaces.Tuple(
+                [self.get_agent_control_action_space(agent) for agent in self.agents]
+            )
+        else:
+            return spaces.Dict(
+                {
+                    agent.name: self.get_agent_control_action_space(agent)
                     for agent in self.agents
                 }
             )
@@ -289,18 +381,24 @@ class Environment(TorchVectorizedObject):
                 }
             )
 
-    def get_agent_action_size(self, agent: Agent):
+    def get_agent_control_action_size(self, agent: Agent):
+        # TODO:: change this to not be hardcoded after his taste
         return (
             self.world.dim_p
             + (1 if agent.action.u_rot_range != 0 else 0)
             + (self.world.dim_c if not agent.silent else 0)
             if self.continuous_actions
             else 1
-            + (1 if agent.action.u_rot_range != 0 else 0)
-            + (1 if not agent.silent else 0)
+                 + (1 if agent.action.u_rot_range != 0 else 0)
+                 + (1 if not agent.silent else 0)
         )
 
-    def get_agent_action_space(self, agent: Agent):
+    def get_agent_action_size(self, agent: Agent):
+        if hasattr(agent, "get_action_size"):
+            return agent.get_action_size()
+        return self.get_agent_control_action_size(agent)
+
+    def get_agent_control_action_space(self, agent: Agent):
         if self.continuous_actions:
             return spaces.Box(
                 low=np.array(
@@ -315,7 +413,7 @@ class Environment(TorchVectorizedObject):
                     + [1] * (self.world.dim_c if not agent.silent else 0),
                     dtype=np.float32,
                 ),
-                shape=(self.get_agent_action_size(agent),),
+                shape=(self.get_agent_control_action_size(agent),),
                 dtype=np.float32,
             )
         else:
@@ -323,15 +421,20 @@ class Environment(TorchVectorizedObject):
                 return spaces.Discrete(self.world.dim_p * 2 + 1)
             else:
                 actions = (
-                    [self.world.dim_p * 2 + 1]
-                    + ([3] if agent.u_rot_range != 0 else [])
-                    + (
-                        [self.world.dim_c]
-                        if not agent.silent and self.world.dim_c != 0
-                        else []
-                    )
+                        [self.world.dim_p * 2 + 1]
+                        + ([3] if agent.u_rot_range != 0 else [])
+                        + (
+                            [self.world.dim_c]
+                            if not agent.silent and self.world.dim_c != 0
+                            else []
+                        )
                 )
                 return spaces.MultiDiscrete(actions)
+
+    def get_agent_action_space(self, agent: Agent):
+        if hasattr(agent, "get_agent_action_space"):
+            return agent.get_agent_action_space()
+        return self.get_agent_control_action_space(agent)
 
     def get_agent_observation_space(self, agent: Agent, obs: AGENT_OBS_TYPE):
         if isinstance(obs, Tensor):
@@ -363,20 +466,20 @@ class Environment(TorchVectorizedObject):
         ), f"Discrete {type} actions are out of bounds, allowed int range [{low},{high})"
 
     # set env action for a particular agent
-    def _set_action(self, action, agent):
+    def _set_control_action(self, action, agent):
         action = action.clone().to(self.device)
         agent.action.u = torch.zeros(
             self.batch_dim, self.world.dim_p, device=self.device, dtype=torch.float32
         )
 
-        assert action.shape[1] == self.get_agent_action_size(agent), (
+        assert action.shape[1] == self.get_agent_control_action_size(agent), (
             f"Agent {agent.name} has wrong action size, got {action.shape[1]}, "
             f"expected {self.get_agent_action_size(agent)}"
         )
         action_index = 0
 
         if self.continuous_actions:
-            physical_action = action[:, action_index : action_index + self.world.dim_p]
+            physical_action = action[:, action_index: action_index + self.world.dim_p]
             action_index += self.world.dim_p
             assert not torch.any(
                 torch.abs(physical_action) > agent.u_range
@@ -460,22 +563,22 @@ class Environment(TorchVectorizedObject):
                 agent.action.c = comm_action
 
     def render(
-        self,
-        mode="human",
-        env_index=0,
-        agent_index_focus: int = None,
-        visualize_when_rgb: bool = False,
-        plot_position_function: Callable = None,
-        plot_position_function_precision: float = 0.01,
-        plot_position_function_range: Optional[
-            Union[
-                float,
-                Tuple[float, float],
-                Tuple[Tuple[float, float], Tuple[float, float]],
-            ]
-        ] = None,
-        plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
-        plot_position_function_cmap_alpha: Optional[float] = 1.0,
+            self,
+            mode="human",
+            env_index=0,
+            agent_index_focus: int = None,
+            visualize_when_rgb: bool = False,
+            plot_position_function: Callable = None,
+            plot_position_function_precision: float = 0.01,
+            plot_position_function_range: Optional[
+                Union[
+                    float,
+                    Tuple[float, float],
+                    Tuple[Tuple[float, float], Tuple[float, float]],
+                ]
+            ] = None,
+            plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
+            plot_position_function_cmap_alpha: Optional[float] = 1.0,
     ):
         """
         Render function for environment using pyglet
@@ -506,7 +609,7 @@ class Environment(TorchVectorizedObject):
         """
         self._check_batch_index(env_index)
         assert (
-            mode in self.metadata["render.modes"]
+                mode in self.metadata["render.modes"]
         ), f"Invalid mode {mode} received, allowed modes: {self.metadata['render.modes']}"
         if agent_index_focus is not None:
             assert 0 <= agent_index_focus < self.n_agents, (
@@ -568,13 +671,13 @@ class Environment(TorchVectorizedObject):
                 [agent.shape.circumscribed_radius() for agent in self.world.agents]
             )
             viewer_size_fit = (
-                torch.stack(
-                    [
-                        torch.max(torch.abs(all_poses[:, X])),
-                        torch.max(torch.abs(all_poses[:, Y])),
-                    ]
-                )
-                + 2 * max_agent_radius
+                    torch.stack(
+                        [
+                            torch.max(torch.abs(all_poses[:, X])),
+                            torch.max(torch.abs(all_poses[:, Y])),
+                        ]
+                    )
+                    + 2 * max_agent_radius
             )
 
             viewer_size = torch.maximum(
@@ -670,15 +773,15 @@ class Environment(TorchVectorizedObject):
             for agent in self.world.agents:
                 if not agent.silent:
                     assert (
-                        agent.state.c is not None
+                            agent.state.c is not None
                     ), "Agent has no comm state but it should"
                     if self.continuous_actions:
                         word = (
-                            "["
-                            + ",".join(
-                                [f"{comm:.2f}" for comm in agent.state.c[env_index]]
-                            )
-                            + "]"
+                                "["
+                                + ",".join(
+                            [f"{comm:.2f}" for comm in agent.state.c[env_index]]
+                        )
+                                + "]"
                         )
                     else:
                         word = ALPHABET[torch.argmax(agent.state.c[env_index]).item()]

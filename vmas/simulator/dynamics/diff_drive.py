@@ -142,7 +142,7 @@ class DiffDriveDynamics:
                     *self.agent.action.u.shape, device=self.world.device, dtype=torch.float32
                 )
                 * self.agent.u_noise
-                if self.agent.u_noise
+                if self.agent.u_noise is not None
                 else 0.0
             )
             self.agent.action.u_local += noise

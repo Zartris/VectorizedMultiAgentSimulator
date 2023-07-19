@@ -1044,6 +1044,7 @@ class World(TorchVectorizedObject):
         self._normal_vector = torch.tensor(
             [1.0, 0.0], dtype=torch.float32, device=self.device
         ).repeat(self._batch_dim, 1)
+        self.sim_time = torch.zeros(self._batch_dim)
 
     def add_agent(self, agent: Agent):
         """Only way to add agents to the world"""
@@ -1075,6 +1076,8 @@ class World(TorchVectorizedObject):
     def reset(self, env_index: int):
         for e in self.entities:
             e._reset(env_index)
+
+        self.sim_time[env_index] = 0.0
 
     @property
     def agents(self) -> List[Agent]:
@@ -1450,6 +1453,7 @@ class World(TorchVectorizedObject):
 
     # update state of the world
     def step(self):
+        self.sim_time = self.sim_time + self._dt
         # forces
         self.force = torch.zeros(
             self._batch_dim,
@@ -1628,15 +1632,15 @@ class World(TorchVectorizedObject):
                 apply_env_forces(*self._get_joint_forces(entity_a, entity_b, joint))
                 if joint.dist == 0:
                     continue
+
             # Collisions
             if self.collides(entity_a, entity_b):
                 apply_env_forces(*self._get_collision_force(entity_a, entity_b))
 
-    # TODO: can be optimized (separate x and y check for example)
+    # TODO: can be optimized (numba, list of only collidables, line profiling)
     def collides(self, a: Entity, b: Entity) -> bool:
         if (not a.collides(b)) or (not b.collides(a)) or a is b:
             return False
-
 
         a_shape = a.shape
         b_shape = b.shape

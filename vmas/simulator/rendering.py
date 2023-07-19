@@ -63,7 +63,6 @@ except ImportError:
         "'xvfb-run -s \"-screen 0 1400x900x24\" python <your_script.py>'"
     )
 
-
 if "Apple" in sys.version:
     if "DYLD_FALLBACK_LIBRARY_PATH" in os.environ:
         os.environ["DYLD_FALLBACK_LIBRARY_PATH"] += ":/usr/lib"
@@ -93,12 +92,12 @@ def get_display(spec):
 class Viewer(object):
     def __init__(self, width, height, display=None, visible=True):
         display = get_display(display)
-
+        config = pyglet.gl.Config(double_buffer=True)
         self.width = width
         self.height = height
 
         self.window = pyglet.window.Window(
-            width=width, height=height, display=display, visible=visible
+            width=width, height=height, display=display, visible=visible, config=config
         )
         self.window.on_close = self.window_closed_by_user
 
@@ -139,13 +138,14 @@ class Viewer(object):
     def add_onetime_list(self, geoms):
         self.onetime_geoms.extend(geoms)
 
-    def render(self, return_rgb_array=False):
+    def render(self, return_rgb_array=False, perform_flip=True):
         glClearColor(1, 1, 1, 1)
 
         self.window.clear()
         self.window.switch_to()
-        self.window.dispatch_events()
+        self.window.clear()
 
+        self.window.dispatch_events()
         self.transform.enable()
 
         text_lines = []
@@ -166,12 +166,13 @@ class Viewer(object):
 
         arr = None
         if return_rgb_array:
-            arr = self.get_array()
-        self.window.flip()
+            arr = self.get_array(flip_array=perform_flip)
+        if perform_flip:
+            self.window.flip()
         self.onetime_geoms = []
         return arr
 
-    def get_array(self):
+    def get_array(self, flip_array=True):
         buffer = pyglet.image.get_buffer_manager().get_color_buffer()
         image_data = buffer.get_image_data()
         arr = np.frombuffer(image_data.get_data(), dtype=np.uint8)
@@ -182,7 +183,9 @@ class Viewer(object):
         # the boundary.) So we use the buffer height/width rather
         # than the requested one.
         arr = arr.reshape((buffer.height, buffer.width, 4))
-        arr = arr[::-1, :, 0:3]
+        if flip_array:
+            arr = arr[::-1, :, :]
+        arr = arr[:, :, 0:3]
         return arr
 
 
@@ -273,11 +276,11 @@ class LineWidth(Attr):
 
 class TextLine(Geom):
     def __init__(
-        self,
-        text: str = "",
-        font_size: int = 15,
-        x: float = 0.0,
-        y: float = 0.0,
+            self,
+            text: str = "",
+            font_size: int = 15,
+            x: float = 0.0,
+            y: float = 0.0,
     ):
         super().__init__()
 
@@ -448,13 +451,13 @@ class Grid(Geom):
 
 
 def render_function_util(
-    f: Callable,
-    plot_range: Union[
-        float, Tuple[float, float], Tuple[Tuple[float, float], Tuple[float, float]]
-    ],
-    precision: float = 0.01,
-    cmap_range: Optional[Tuple[float, float]] = None,
-    cmap_alpha: float = 1.0,
+        f: Callable,
+        plot_range: Union[
+            float, Tuple[float, float], Tuple[Tuple[float, float], Tuple[float, float]]
+        ],
+        precision: float = 0.01,
+        cmap_range: Optional[Tuple[float, float]] = None,
+        cmap_alpha: float = 1.0,
 ):
     if isinstance(plot_range, int) or isinstance(plot_range, float):
         x_min = -plot_range
@@ -541,6 +544,5 @@ def make_capsule(length, width):
     circ1.add_attr(Transform(translation=(length, 0)))
     geom = Compound([box, circ0, circ1])
     return geom
-
 
 # ================================================================

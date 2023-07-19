@@ -17,16 +17,17 @@ class GymWrapper(gym.Env):
     metadata = Environment.metadata
 
     def __init__(
-        self,
-        env: Environment,
+            self,
+            env: Environment,
     ):
         assert (
-            env.num_envs == 1
+                env.num_envs == 1
         ), f"GymEnv wrapper is not vectorised, got env.num_envs: {env.num_envs}"
 
         self._env = env
         self.observation_space = self._env.observation_space
         self.action_space = self._env.action_space
+        self.control_action_space = self._env.control_action_space
 
     def unwrapped(self) -> Environment:
         return self._env
@@ -52,11 +53,11 @@ class GymWrapper(gym.Env):
         return obs, rews, done, info
 
     def reset(
-        self,
-        *,
-        seed: Optional[int] = None,
-        return_info: bool = False,
-        options: Optional[dict] = None,
+            self,
+            *,
+            seed: Optional[int] = None,
+            return_info: bool = False,
+            options: Optional[dict] = None,
     ):
         if seed is not None:
             self._env.seed(seed)
@@ -70,11 +71,11 @@ class GymWrapper(gym.Env):
         return obs
 
     def render(
-        self,
-        mode="human",
-        agent_index_focus: Optional[int] = None,
-        visualize_when_rgb: bool = False,
-        **kwargs,
+            self,
+            mode="human",
+            agent_index_focus: Optional[int] = None,
+            visualize_when_rgb: bool = False,
+            **kwargs,
     ) -> Optional[np.ndarray]:
         return self._env.render(
             mode=mode,
@@ -86,7 +87,7 @@ class GymWrapper(gym.Env):
 
     def _action_list_to_tensor(self, list_in: List) -> List:
         assert (
-            len(list_in) == self._env.n_agents
+                len(list_in) == self._env.n_agents
         ), f"Expecting actions for {self._env.n_agents} agents, got {len(list_in)} actions"
         actions = []
         for agent in self._env.agents:
@@ -103,7 +104,7 @@ class GymWrapper(gym.Env):
             act = torch.tensor(list_in[i], dtype=torch.float32, device=self._env.device)
             if len(act.shape) == 0:
                 assert (
-                    self._env.get_agent_action_size(self._env.agents[i]) == 1
+                        self._env.get_agent_action_size(self._env.agents[i]) == 1
                 ), f"Action of agent {i} is supposed to be an scalar int"
             else:
                 assert len(act.shape) == 1 and act.shape[

@@ -24,8 +24,8 @@ class VectorEnvWrapper(rllib.VectorEnv):
     """
 
     def __init__(
-        self,
-        env: Environment,
+            self,
+            env: Environment,
     ):
         self._env = env
         super().__init__(
@@ -33,6 +33,7 @@ class VectorEnvWrapper(rllib.VectorEnv):
             action_space=self._env.action_space,
             num_envs=self._env.num_envs,
         )
+        self.control_action_space = self._env.control_action_space
 
     @property
     def env(self):
@@ -48,7 +49,7 @@ class VectorEnvWrapper(rllib.VectorEnv):
         return self._read_data(obs, env_index=index)[0]
 
     def vector_step(
-        self, actions: List[EnvActionType]
+            self, actions: List[EnvActionType]
     ) -> Tuple[List[EnvObsType], List[float], List[bool], List[EnvInfoDict]]:
         # saved_actions = actions
         actions = self._action_list_to_tensor(actions)
@@ -78,12 +79,12 @@ class VectorEnvWrapper(rllib.VectorEnv):
         return self._env.seed(seed)
 
     def try_render_at(
-        self,
-        index: Optional[int] = None,
-        mode="human",
-        agent_index_focus: Optional[int] = None,
-        visualize_when_rgb: bool = False,
-        **kwargs,
+            self,
+            index: Optional[int] = None,
+            mode="human",
+            agent_index_focus: Optional[int] = None,
+            visualize_when_rgb: bool = False,
+            **kwargs,
     ) -> Optional[np.ndarray]:
         """
         Render function for environment using pyglet
@@ -128,7 +129,7 @@ class VectorEnvWrapper(rllib.VectorEnv):
                 )
             for j in range(self.num_envs):
                 assert (
-                    len(list_in[j]) == self._env.n_agents
+                        len(list_in[j]) == self._env.n_agents
                 ), f"Expecting actions for {self._env.n_agents} agents, got {len(list_in[j])} actions"
                 for i in range(self._env.n_agents):
                     act = torch.tensor(
@@ -136,7 +137,7 @@ class VectorEnvWrapper(rllib.VectorEnv):
                     )
                     if len(act.shape) == 0:
                         assert (
-                            self._env.get_agent_action_size(self._env.agents[i]) == 1
+                                self._env.get_agent_action_size(self._env.agents[i]) == 1
                         ), f"Action of agent {i} in env {j} is supposed to be an scalar int"
                     else:
                         assert len(act.shape) == 1 and act.shape[
@@ -151,11 +152,11 @@ class VectorEnvWrapper(rllib.VectorEnv):
             assert False, "Input action is not in correct format"
 
     def _read_data(
-        self,
-        obs: Optional[OBS_TYPE],
-        info: Optional[INFO_TYPE] = None,
-        reward: Optional[REWARD_TYPE] = None,
-        env_index: Optional[int] = None,
+            self,
+            obs: Optional[OBS_TYPE],
+            info: Optional[INFO_TYPE] = None,
+            reward: Optional[REWARD_TYPE] = None,
+            env_index: Optional[int] = None,
     ):
         if env_index is None:
             obs_list = []
@@ -181,11 +182,11 @@ class VectorEnvWrapper(rllib.VectorEnv):
             return self._get_data_at_env_index(env_index, obs, info, reward)
 
     def _get_data_at_env_index(
-        self,
-        env_index: int,
-        obs: Optional[OBS_TYPE],
-        info: Optional[INFO_TYPE] = None,
-        reward: Optional[REWARD_TYPE] = None,
+            self,
+            env_index: int,
+            obs: Optional[OBS_TYPE],
+            info: Optional[INFO_TYPE] = None,
+            reward: Optional[REWARD_TYPE] = None,
     ):
         assert len(obs) == self._env.n_agents
         total_rew = 0.0
@@ -235,14 +236,14 @@ class VectorEnvWrapper(rllib.VectorEnv):
         )
 
     def _get_agent_data_at_env_index(
-        self,
-        env_index: int,
-        agent_data,
+            self,
+            env_index: int,
+            agent_data,
     ):
         if isinstance(agent_data, (ndarray, Tensor)):
             assert agent_data.shape[0] == self._env.num_envs
             if len(agent_data.shape) == 1 or (
-                len(agent_data.shape) == 2 and agent_data.shape[1] == 1
+                    len(agent_data.shape) == 2 and agent_data.shape[1] == 1
             ):
                 return agent_data[env_index].item()
             elif isinstance(agent_data, Tensor):

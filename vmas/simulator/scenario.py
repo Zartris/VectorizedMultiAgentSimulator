@@ -38,7 +38,7 @@ class BaseScenario(ABC):
     def world(self):
         """Do not override"""
         assert (
-            self._world is not None
+                self._world is not None
         ), "You first need to set `self._world` in the `make_world` method"
         return self._world
 
@@ -58,6 +58,10 @@ class BaseScenario(ABC):
         """Do not override"""
         self.world.reset(env_index)
         self.reset_world_at(env_index)
+
+    def env_process_action_input(self, agent: Agent, action: Tensor):
+        """Do not override"""
+        return self.process_action_input(agent, action)
 
     def env_process_action(self, agent: Agent):
         """Do not override"""
@@ -267,8 +271,20 @@ class BaseScenario(ABC):
         It has access to the world through the `self.world` attribute
 
         It can also be used for any other type of computation that has to happen after
-         the input actions have been set but before the simulation step
+         the control input actions have been set but before the simulation step
 
         :param agent: the agent whose actions have to be processed.
         """
         pass
+
+    def process_action_input(self, agent: Agent, action: torch.Tensor):
+        """
+        This function can be overridden to process the agent input actions before it is handed to the control segment of the simulation.
+        It is a chance to have an arbitrary input format and convert it into the format expected by the control segment of the simulation.
+        It has access to the world through the `self.world` attribute
+
+        :param agent: the agent whose actions have to be processed.
+        :param action: the action tensor that has to be processed.
+        :return: the processed action tensor.
+        """
+        return action

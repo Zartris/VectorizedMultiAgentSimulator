@@ -57,6 +57,20 @@ class Color(Enum):
     WHITE = (0.75, 0.75, 0.75)
     GRAY = (0.25, 0.25, 0.25)
     BLACK = (0.15, 0.15, 0.15)
+    ORANGE = (0.95, 0.65, 0.25)
+    YELLOW = (0.95, 0.95, 0.25)
+    PURPLE = (0.75, 0.25, 0.75)
+    PINK = (0.95, 0.25, 0.75)
+    BROWN = (0.65, 0.45, 0.25)
+    LIGHT_BLUE = (0.25, 0.65, 0.95)
+    LIGHT_GRAY = (0.65, 0.65, 0.65)
+    LIGHT_RED = (0.95, 0.45, 0.45)
+    LIGHT_PURPLE = (0.65, 0.25, 0.65)
+    LIGHT_PINK = (0.95, 0.25, 0.65)
+    LIGHT_BROWN = (0.75, 0.45, 0.25)
+    LIGHT_ORANGE = (0.95, 0.45, 0.25)
+    LIGHT_YELLOW = (0.95, 0.95, 0.45)
+
 
 
 def override(cls):
@@ -231,7 +245,7 @@ class ScenarioUtils:
 
     @staticmethod
     def find_random_pos_for_entity(
-            occupied_positions: torch.Tensor,
+            occupied_positions: Union[torch.Tensor, None],
             env_index: int,
             world,
             min_dist_between_entities: float,
@@ -259,7 +273,7 @@ class ScenarioUtils:
             )
             if pos is None:
                 pos = proposed_pos
-            if occupied_positions.shape[1] == 0:
+            if occupied_positions is None or occupied_positions.shape[1] == 0:
                 break
 
             dist = torch.cdist(occupied_positions, pos)
