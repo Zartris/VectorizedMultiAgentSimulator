@@ -9,6 +9,7 @@ from typing import List, Tuple, Callable, Optional, Union, Dict
 import numpy as np
 import torch
 from gym import spaces
+from line_profiler_pycharm import profile
 from torch import Tensor
 
 from vmas.simulator.core import Agent, TorchVectorizedObject
@@ -165,7 +166,8 @@ class Environment(TorchVectorizedObject):
             dones = self.done()
 
         result = [obs, rewards, dones, infos]
-        return [data for data in result if data is not None]
+        # return [data for data in result if data is not None]
+        return result
 
     def seed(self, seed=None):
         if seed is None:
@@ -175,6 +177,7 @@ class Environment(TorchVectorizedObject):
         random.seed(seed)
         return [seed]
 
+    @profile
     def step(self, actions: Union[List, Dict]):
         """Performs a vectorized step on all sub environments using `actions`.
         Args:
@@ -210,10 +213,16 @@ class Environment(TorchVectorizedObject):
         rewards = [torch.zeros(self.num_envs, device=self.device)] * self.n_agents
         dones = []
         infos = []
+        time_to_record_obs = inner_epochs / actions.shape[-2]  # predict_horizon_sec * predict_hz
         for inner_epoch in range(inner_epochs):
             # extract the actions for this inner epoch
-            inner_obs, inner_rewards, inner_dones, inner_infos = self._step_inner(trajectories, inner_epoch)
-            obs.append(inner_obs)
+            record_obs = (inner_epoch + 1) % time_to_record_obs == 0
+            inner_obs, inner_rewards, inner_dones, inner_infos = self._step_inner(trajectories, inner_epoch,
+                                                                                  get_obs=record_obs)
+            if record_obs:
+                obs.append(inner_obs)
+
+            # rewards += inner_rewards
             for a_index in range(len(inner_rewards)):
                 rewards[a_index] += inner_rewards[a_index]
             dones = inner_dones
@@ -241,7 +250,8 @@ class Environment(TorchVectorizedObject):
         # print(f"Info len (n_agents): {len(infos)}, info[0] (infos agent 0): {infos[0]}")
         return obs, rewards, dones, infos
 
-    def _step_inner(self, trajectories, inner_epoch):
+    @profile
+    def _step_inner(self, trajectories, inner_epoch, get_obs=True):
 
         # set action for each agent
         for i, agent in enumerate(self.agents):
@@ -256,8 +266,10 @@ class Environment(TorchVectorizedObject):
         self.world.step()
 
         self.steps += 1
+        # TODO:: We dont need to collect all the information all the time.
+
         obs, rewards, dones, infos = self.get_from_scenario(
-            get_observations=True, get_infos=True, get_rewards=True, get_dones=True
+            get_observations=get_obs, get_infos=True, get_rewards=True, get_dones=True
         )
 
         for agent in self.world.agents:

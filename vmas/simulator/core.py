@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, List, Tuple
 
 import torch
+from line_profiler_pycharm import profile
 from torch import Tensor
 from vmas.simulator.joints import JointConstraint, Joint
 from vmas.simulator.sensors import Sensor
@@ -1452,6 +1453,7 @@ class World(TorchVectorizedObject):
         return return_value
 
     # update state of the world
+    @profile
     def step(self):
         self.sim_time = self.sim_time + self._dt
         # forces
@@ -1612,6 +1614,7 @@ class World(TorchVectorizedObject):
             )
 
     # gather physical forces acting on entities
+    @profile
     def _apply_environment_force(self, entity_a: Entity, a: int):
         def apply_env_forces(f_a, t_a, f_b, t_b):
             if entity_a.movable:
@@ -1638,20 +1641,23 @@ class World(TorchVectorizedObject):
                 apply_env_forces(*self._get_collision_force(entity_a, entity_b))
 
     # TODO: can be optimized (numba, list of only collidables, line profiling)
+    @profile
     def collides(self, a: Entity, b: Entity) -> bool:
         if (not a.collides(b)) or (not b.collides(a)) or a is b:
+            return False
+
+        # Here we assume that if both entities are not movable and not rotatable, they cannot collide (user error)
+        if not a.movable and not a.rotatable and not b.movable and not b.rotatable:
             return False
 
         a_shape = a.shape
         b_shape = b.shape
         if (
-                torch.linalg.vector_norm(a.state.pos - b.state.pos, dim=1)
-                > a.shape.circumscribed_radius() + b.shape.circumscribed_radius()
+                torch.linalg.vector_norm(a.state.pos - b.state.pos,
+                                         dim=1) > a_shape.circumscribed_radius() + b_shape.circumscribed_radius()
         ).all():
             return False
-        # Here we assume that if both entities are not movable and not rotatable, they cannot collide (user error)
-        if not a.movable and not a.rotatable and not b.movable and not b.rotatable:
-            return False
+
         if {a_shape.__class__, b_shape.__class__} in self._collidable_pairs:
             return True
         return False
