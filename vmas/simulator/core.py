@@ -935,6 +935,10 @@ class Agent(Entity):
     def adversary(self):
         return self._adversary
 
+    @property
+    def obs_range(self):
+        return self._obs_range
+
     @override(Entity)
     def _spawn(self, dim_c: int, dim_p: int):
         if dim_c == 0:

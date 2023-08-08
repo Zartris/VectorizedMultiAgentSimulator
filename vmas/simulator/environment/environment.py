@@ -209,7 +209,7 @@ class Environment(TorchVectorizedObject):
         trajectories = torch.moveaxis(trajectories, 2, 0)  # (inner_batch, agent_ind, env_ind, action)
 
         inner_epochs = 1 if actions.dim() != 4 else trajectories.shape[0]
-        obs = []
+        obs = [[] for _ in range(self.n_agents)]
         rewards = [torch.zeros(self.num_envs, device=self.device)] * self.n_agents
         dones = []
         infos = []
@@ -220,7 +220,10 @@ class Environment(TorchVectorizedObject):
             inner_obs, inner_rewards, inner_dones, inner_infos = self._step_inner(trajectories, inner_epoch,
                                                                                   get_obs=record_obs)
             if record_obs:
-                obs.append(inner_obs)
+                for a_index in range(len(inner_obs)):
+                    t_obs = inner_obs[a_index]
+                    obs[a_index].append(t_obs)
+                # obs.append(inner_obs)
 
             # rewards += inner_rewards
             for a_index in range(len(inner_rewards)):
@@ -450,12 +453,10 @@ class Environment(TorchVectorizedObject):
 
     def get_agent_observation_space(self, agent: Agent, obs: AGENT_OBS_TYPE):
         if isinstance(obs, Tensor):
-            return spaces.Box(
-                low=-np.float32("inf"),
-                high=np.float32("inf"),
-                shape=(len(obs[0]),),
-                dtype=np.float32,
-            )
+            return spaces.Box(low=-np.float32("inf"),
+                              high=np.float32("inf"),
+                              shape=list(obs[0].shape),
+                              dtype=np.float32, )
         elif isinstance(obs, Dict):
             return spaces.Dict(
                 {
