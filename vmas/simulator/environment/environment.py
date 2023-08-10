@@ -210,7 +210,7 @@ class Environment(TorchVectorizedObject):
 
         inner_epochs = 1 if actions.dim() != 4 else trajectories.shape[0]
         obs = [[] for _ in range(self.n_agents)]
-        rewards = [torch.zeros(self.num_envs, device=self.device)] * self.n_agents
+        rewards = [torch.zeros(self.num_envs, device=self.device) for _ in range(self.n_agents)]
         dones = []
         infos = []
         time_to_record_obs = inner_epochs / actions.shape[-2]  # predict_horizon_sec * predict_hz
