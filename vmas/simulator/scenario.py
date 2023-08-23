@@ -118,7 +118,7 @@ class BaseScenario(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def reset_world_at(self, env_index: int = None):
+    def reset_world_at(self, env_index: typing.Union[int, list, Tensor] = None):
         """
         Resets the world at the specified env_index.
         When a None index is passed, the world should make a vectorized (batched) reset.

@@ -57,11 +57,24 @@ class TorchVectorizedObject(object):
     def device(self, device: torch.device):
         self._device = device
 
-    def _check_batch_index(self, batch_index: int):
+    def _check_batch_index(self, batch_index: typing.Union[int, list, Tensor]):
         if batch_index is not None:
-            assert (
-                    0 <= batch_index < self.batch_dim
-            ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
+            if isinstance(batch_index, list):
+                for b in batch_index:
+                    assert (
+                            0 <= b < self.batch_dim
+                    ), f"Index must be between 0 and {self.batch_dim}, got {b}"
+            elif isinstance(batch_index, Tensor):
+                assert (
+                        batch_index.max() < self.batch_dim
+                ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
+                assert (
+                        batch_index.min() >= 0
+                ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
+            else:
+                assert (
+                        0 <= batch_index < self.batch_dim
+                ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
 
     def to(self, device: torch.device):
         self.device = device
@@ -1078,11 +1091,26 @@ class World(TorchVectorizedObject):
                 }
             )
 
-    def reset(self, env_index: int):
-        for e in self.entities:
-            e._reset(env_index)
+    def reset(self, env_index: typing.Union[int, list, Tensor]):
+        if isinstance(env_index, int):
+            for e in self.entities:
+                e._reset(env_index)
+            self.sim_time[env_index] = 0.0
 
-        self.sim_time[env_index] = 0.0
+        elif isinstance(env_index, list):
+            for ei in env_index:
+                for e in self.entities:
+                    e._reset(ei)
+                self.sim_time[ei] = 0.0
+
+        elif isinstance(env_index, Tensor):
+            if env_index.nelement() == 1:
+                self.reset(env_index.item())
+            else:
+                for ei in range(env_index.shape[0]):
+                    for e in self.entities:
+                        e._reset(ei)
+                    self.sim_time[ei] = 0.0
 
     @property
     def agents(self) -> List[Agent]:

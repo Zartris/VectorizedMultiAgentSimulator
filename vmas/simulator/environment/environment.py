@@ -96,9 +96,19 @@ class Environment(TorchVectorizedObject):
         )
         return result[0] if result and len(result) == 1 else result
 
+    def unpacked_index(self, index):
+        if isinstance(index, int):
+            return index
+        elif isinstance(index, list):
+            return index
+        elif isinstance(index, Tensor):
+            return index.tolist()
+        else:
+            raise NotImplementedError
+
     def reset_at(
             self,
-            index: int,
+            index: Union[int, list, Tensor],
             return_observations: bool = True,
             return_info: bool = False,
             return_dones: bool = False,
@@ -108,8 +118,13 @@ class Environment(TorchVectorizedObject):
         Returns observations for all agents in that environment
         """
         self._check_batch_index(index)
+        index = self.unpacked_index(index)
         self.scenario.env_reset_world_at(index)
-        self.steps[index] = 0
+        if isinstance(index, int):
+            self.steps[index] = 0
+        else:
+            for i in index:
+                self.steps[i] = 0
 
         result = self.get_from_scenario(
             get_observations=return_observations,
@@ -117,15 +132,17 @@ class Environment(TorchVectorizedObject):
             get_rewards=False,
             get_dones=return_dones,
         )
+        if return_observations and not return_info and not return_dones:
+            return result[0]
 
         return result[0] if result and len(result) == 1 else result
 
     def get_from_scenario(
             self,
-            get_observations: bool,
-            get_rewards: bool,
-            get_infos: bool,
-            get_dones: bool,
+            get_observations: bool = False,
+            get_rewards: bool = False,
+            get_infos: bool = False,
+            get_dones: bool = False,
             dict_agent_names: Optional[bool] = None,
     ):
         if not get_infos and not get_dones and not get_rewards and not get_observations:
@@ -209,25 +226,29 @@ class Environment(TorchVectorizedObject):
         trajectories = torch.moveaxis(trajectories, 2, 0)  # (inner_batch, agent_ind, env_ind, action)
 
         inner_epochs = 1 if actions.dim() != 4 else trajectories.shape[0]
+        time_to_record_obs = inner_epochs / actions.shape[-2]  # predict_horizon_sec * predict_hz
+
         obs = [[] for _ in range(self.n_agents)]
-        rewards = [torch.zeros(self.num_envs, device=self.device) for _ in range(self.n_agents)]
+        rewards = [torch.zeros((actions.shape[-2], self.num_envs), device=self.device) for _ in range(self.n_agents)]
+        rew_index = 0
         dones = []
         infos = []
-        time_to_record_obs = inner_epochs / actions.shape[-2]  # predict_horizon_sec * predict_hz
         for inner_epoch in range(inner_epochs):
             # extract the actions for this inner epoch
             record_obs = (inner_epoch + 1) % time_to_record_obs == 0
             inner_obs, inner_rewards, inner_dones, inner_infos = self._step_inner(trajectories, inner_epoch,
                                                                                   get_obs=record_obs)
+            # rewards += inner_rewards
+            for a_index in range(len(inner_rewards)):
+                rewards[a_index][rew_index] += inner_rewards[a_index]
+
             if record_obs:
+                rew_index += 1
                 for a_index in range(len(inner_obs)):
                     t_obs = inner_obs[a_index]
                     obs[a_index].append(t_obs)
                 # obs.append(inner_obs)
 
-            # rewards += inner_rewards
-            for a_index in range(len(inner_rewards)):
-                rewards[a_index] += inner_rewards[a_index]
             dones = inner_dones
             infos.append(inner_infos)
         debug = 0
