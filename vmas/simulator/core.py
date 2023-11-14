@@ -382,6 +382,7 @@ class Action(TorchVectorizedObject):
         # communication_action
         self._c = None
 
+
     @property
     def u(self):
         return self._u
