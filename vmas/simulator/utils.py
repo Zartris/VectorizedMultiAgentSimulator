@@ -72,7 +72,6 @@ class Color(Enum):
     LIGHT_YELLOW = (0.95, 0.95, 0.45)
 
 
-
 def override(cls):
     """Decorator for documenting method overrides."""
 
@@ -300,3 +299,143 @@ class ScenarioUtils:
                 return {key: ScenarioUtils.format_obs(value) for key, value in obs.items()}
             else:
                 raise NotImplementedError(f"Invalid type of observation {obs}")
+
+    @staticmethod
+    def create_distance_field_torch(occupied_positions, x_bounds, y_bounds, resolution=100):
+        """
+        Create a distance field using PyTorch.
+        :param occupied_positions: Tensor of positions [N, 2].
+        :param x_bounds: Tuple (min_x, max_x).
+        :param y_bounds: Tuple (min_y, max_y).
+        :param resolution: Resolution of the grid.
+        """
+        # Create a grid of points
+        device = occupied_positions.device
+        x = torch.linspace(x_bounds[0], x_bounds[1], resolution, device=device)
+        y = torch.linspace(y_bounds[0], y_bounds[1], resolution, device=device)
+        xx, yy = torch.meshgrid(x, y)
+        grid_points = torch.stack((xx.flatten(), yy.flatten()), dim=1)
+
+        # Calculate distance to the nearest occupied position
+        distances = torch.cdist(grid_points, occupied_positions).min(dim=1).values
+        distance_grid = distances.view(resolution, resolution)
+
+        return distance_grid
+
+    @staticmethod
+    def find_position_torch(distance_field, x_bounds, y_bounds, steps=100, learning_rate=1e-1):
+        """
+        Find a position in the distance field with maximum distance from occupied positions.
+        :param distance_field: The distance field tensor.
+        :param x_bounds: Tuple (min_x, max_x).
+        :param y_bounds: Tuple (min_y, max_y).
+        :param steps: Number of optimization steps.
+        :param learning_rate: Learning rate for the optimization.
+        """
+        device = distance_field.device
+        # Random initial guess
+        pos = torch.tensor([np.random.uniform(*x_bounds), np.random.uniform(*y_bounds)], requires_grad=True,
+                           device=device)
+
+        optimizer = torch.optim.Adam([pos], lr=learning_rate)
+
+        for _ in range(steps):
+            optimizer.zero_grad()
+
+            # Clamp position within bounds
+            clamped_pos = torch.stack([pos[0].clamp(*x_bounds), pos[1].clamp(*y_bounds)])
+
+            # Interpolate distance at the current position
+            distance = torch.nn.functional.grid_sample(
+                distance_field.unsqueeze(0).unsqueeze(0),
+                clamped_pos.view(1, 1, 1, 2) * 2 - 1,  # Normalize to [-1, 1]
+                padding_mode='border',
+                align_corners=True
+            ).squeeze()
+
+            # Maximize the distance (minimize the negative distance)
+            loss = -distance
+            loss.backward()
+            optimizer.step()
+
+        return pos.detach(), distance.detach()
+
+    @staticmethod
+    def find_position_torch_adjusted(distance_field, occupied_positions, x_bounds, y_bounds, steps=100,
+                                     learning_rate=1e-1):
+        device = distance_field.device
+        pos = torch.tensor([np.random.uniform(*x_bounds), np.random.uniform(*y_bounds)], requires_grad=True,
+                           device=device)
+        optimizer = torch.optim.Adam([pos], lr=learning_rate)
+
+        for _ in range(steps):
+            optimizer.zero_grad()
+            clamped_pos = torch.stack([pos[0].clamp(*x_bounds), pos[1].clamp(*y_bounds)])
+            normalized_pos = (clamped_pos - torch.tensor([x_bounds[0], y_bounds[0]], device=device)) / torch.tensor(
+                [x_bounds[1] - x_bounds[0], y_bounds[1] - y_bounds[0]], device=device)
+            distance = torch.nn.functional.grid_sample(distance_field.unsqueeze(0).unsqueeze(0),
+                                                       normalized_pos.view(1, 1, 1, 2) * 2 - 1, padding_mode='border',
+                                                       align_corners=True).squeeze()
+            loss = -distance
+            loss.backward()
+            optimizer.step()
+
+        final_pos = clamped_pos.detach()
+        actual_distance = torch.cdist(occupied_positions, final_pos.unsqueeze(0)).min()
+        return final_pos, actual_distance.item()
+
+    @staticmethod
+    def try_find_random_pos_for_entity(
+            occupied_positions: Union[torch.Tensor, None],
+            env_index: int,
+            world,
+            min_dist_between_entities: float,
+            x_bounds: Tuple[int, int],
+            y_bounds: Tuple[int, int],
+            num_tries: int = 100,
+    ):
+        batch_size = world.batch_dim if env_index is None else 1
+
+        # Example Usage
+        distance_field = ScenarioUtils.create_distance_field_torch(occupied_positions, x_bounds, y_bounds,
+                                                                   resolution=1000)
+
+        pos = None
+        epoch = 0
+        while True:
+            proposed_pos, dist = ScenarioUtils.find_position_torch_adjusted(distance_field, occupied_positions,
+                                                                            x_bounds, y_bounds)
+            proposed_pos = proposed_pos.view(1, 1, 2)
+            print(proposed_pos)
+
+            proposed_pos2 = torch.cat(
+                [
+                    torch.empty(
+                        (batch_size, 1, 1),
+                        device=world.device,
+                        dtype=torch.float32,
+                    ).uniform_(*x_bounds),
+                    torch.empty(
+                        (batch_size, 1, 1),
+                        device=world.device,
+                        dtype=torch.float32,
+                    ).uniform_(*y_bounds),
+                ],
+                dim=2,
+            )
+            if pos is None:
+                pos = proposed_pos
+            if occupied_positions is None or occupied_positions.shape[1] == 0:
+                break
+
+            dist = torch.cdist(occupied_positions, pos)
+            overlaps = torch.any((dist < min_dist_between_entities).squeeze(2), dim=1)
+            if torch.any(overlaps, dim=0):
+                pos[overlaps] = proposed_pos[overlaps]
+            else:
+                break
+            epoch += 1
+            if epoch > num_tries:
+                print("Failed to find a free position")
+                return None
+        return pos
