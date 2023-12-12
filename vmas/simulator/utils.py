@@ -1,6 +1,7 @@
 #  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
+import importlib
 import os
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -9,6 +10,11 @@ from typing import List, Tuple, Union, Dict, Sequence
 import numpy as np
 import torch
 from torch import Tensor
+
+_has_matplotlib = importlib.util.find_spec("matplotlib") is not None
+
+if _has_matplotlib:
+    from matplotlib import cm
 
 X = 0
 Y = 1
@@ -136,19 +142,25 @@ def save_video(name: str, frame_list: List[np.array], fps: int):
 
 
 def x_to_rgb_colormap(
-        x: np.ndarray, low: float = None, high: float = None, alpha: float = 1.0
+    x: np.ndarray,
+    low: float = None,
+    high: float = None,
+    alpha: float = 1.0,
+    cmap_name: str = "viridis",
+    cmap_res: int = 10,
 ):
-    res = VIRIDIS_CMAP.shape[0]
+    colormap = cm.get_cmap(cmap_name, cmap_res)(range(cmap_res))[:, :-1]
+    # res = VIRIDIS_CMAP.shape[0]
     if low is None:
         low = np.min(x)
     if high is None:
         high = np.max(x)
     x = np.clip(x, low, high)
-    x = (x - low) / (high - low) * (res - 1)
+    x = (x - low) / (high - low) * (cmap_res - 1)
     x_c0_idx = np.floor(x).astype(int)
     x_c1_idx = np.ceil(x).astype(int)
-    x_c0 = VIRIDIS_CMAP[x_c0_idx, :]
-    x_c1 = VIRIDIS_CMAP[x_c1_idx, :]
+    x_c0 = colormap[x_c0_idx, :]
+    x_c1 = colormap[x_c1_idx, :]
     t = x - x_c0_idx
     rgb = t[:, None] * x_c1 + (1 - t)[:, None] * x_c0
     colors = np.concatenate([rgb, alpha * np.ones((rgb.shape[0], 1))], axis=-1)
@@ -176,16 +188,18 @@ class TorchUtils:
 
     @staticmethod
     def rotate_vector(vector: Tensor, angle: Tensor):
-        if len(angle.shape) > 1:
+        if len(angle.shape) == len(vector.shape):
             angle = angle.squeeze(-1)
-        if len(vector.shape) == 1:
-            vector = vector.unsqueeze(0)
+
+        assert vector.shape[:-1] == angle.shape
+        assert vector.shape[-1] == 2
+
         cos = torch.cos(angle)
         sin = torch.sin(angle)
         return torch.stack(
             [
-                vector[:, X] * cos - vector[:, Y] * sin,
-                vector[:, X] * sin + vector[:, Y] * cos,
+                vector[..., X] * cos - vector[..., Y] * sin,
+                vector[..., X] * sin + vector[..., Y] * cos,
             ],
             dim=-1,
         )
@@ -193,8 +207,8 @@ class TorchUtils:
     @staticmethod
     def cross(vector_a: Tensor, vector_b: Tensor):
         return (
-                vector_a[:, X] * vector_b[:, Y] - vector_a[:, Y] * vector_b[:, X]
-        ).unsqueeze(1)
+            vector_a[..., X] * vector_b[..., Y] - vector_a[..., Y] * vector_b[..., X]
+        ).unsqueeze(-1)
 
     @staticmethod
     def compute_torque(f: Tensor, r: Tensor) -> Tensor:
@@ -210,6 +224,13 @@ class TorchUtils:
             return [TorchUtils.to_numpy(value) for value in data]
         else:
             raise NotImplementedError(f"Invalid type of data {data}")
+
+    @staticmethod
+    def recursive_clone(value: Union[Dict[str, Tensor], Tensor]):
+        if isinstance(value, Tensor):
+            return value.clone()
+        else:
+            return {key: TorchUtils.recursive_clone(val) for key, val in value.items()}
 
 
 class ScenarioUtils:

@@ -1,7 +1,6 @@
 #  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
-import copy
 import random
 from ctypes import byref
 from typing import List, Tuple, Callable, Optional, Union, Dict
@@ -11,7 +10,6 @@ import torch
 from gym import spaces
 from line_profiler_pycharm import profile
 from torch import Tensor
-
 from vmas.simulator.core import Agent, TorchVectorizedObject
 from vmas.simulator.scenario import BaseScenario
 import vmas.simulator.utils
@@ -23,6 +21,7 @@ from vmas.simulator.utils import (
     ALPHABET,
     DEVICE_TYPING,
     override,
+    TorchUtils,
 )
 
 
@@ -59,7 +58,6 @@ class Environment(TorchVectorizedObject):
         self.reset(seed=seed)
 
         # configure spaces
-        # TODO:: change to control action space
         self.action_space = self.get_action_space()
         self.control_action_space = self.get_control_action_space()
         self.observation_space = self.get_observation_space()
@@ -167,13 +165,15 @@ class Environment(TorchVectorizedObject):
                 else:
                     rewards.append(reward)
             if get_observations:
-                observation = copy.deepcopy(self.scenario.observation(agent))
+                observation = TorchUtils.recursive_clone(
+                    self.scenario.observation(agent)
+                )
                 if dict_agent_names:
                     obs.update({agent.name: observation})
                 else:
                     obs.append(observation)
             if get_infos:
-                info = copy.deepcopy(self.scenario.info(agent))
+                info = TorchUtils.recursive_clone(self.scenario.info(agent))
                 if dict_agent_names:
                     infos.update({agent.name: info})
                 else:
@@ -492,16 +492,14 @@ class Environment(TorchVectorizedObject):
 
     def _check_discrete_action(self, action: Tensor, low: int, high: int, type: str):
         assert torch.all(
-            torch.any(
-                torch.arange(low, high, device=self.device).repeat(self.num_envs)
-                == action,
-                dim=-1,
-            )
+            (action >= torch.tensor(low, device=self.device))
+            * (action < torch.tensor(high, device=self.device))
         ), f"Discrete {type} actions are out of bounds, allowed int range [{low},{high})"
 
     # set env action for a particular agent
     def _set_control_action(self, action, agent):
-        action = action.clone().to(self.device)
+        action = action.clone().detach().to(self.device)
+        assert not action.isnan().any()
         agent.action.u = torch.zeros(
             self.batch_dim, self.world.dim_p, device=self.device, dtype=torch.float32
         )
@@ -597,22 +595,23 @@ class Environment(TorchVectorizedObject):
                 agent.action.c = comm_action
 
     def render(
-            self,
-            mode="human",
-            env_index=0,
-            agent_index_focus: int = None,
-            visualize_when_rgb: bool = False,
-            plot_position_function: Callable = None,
-            plot_position_function_precision: float = 0.01,
-            plot_position_function_range: Optional[
-                Union[
-                    float,
-                    Tuple[float, float],
-                    Tuple[Tuple[float, float], Tuple[float, float]],
-                ]
-            ] = None,
-            plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
-            plot_position_function_cmap_alpha: Optional[float] = 1.0,
+        self,
+        mode="human",
+        env_index=0,
+        agent_index_focus: int = None,
+        visualize_when_rgb: bool = False,
+        plot_position_function: Callable = None,
+        plot_position_function_precision: float = 0.01,
+        plot_position_function_range: Optional[
+            Union[
+                float,
+                Tuple[float, float],
+                Tuple[Tuple[float, float], Tuple[float, float]],
+            ]
+        ] = None,
+        plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
+        plot_position_function_cmap_alpha: Optional[float] = 1.0,
+        plot_position_function_cmap_name: Optional[str] = "viridis",
     ):
         """
         Render function for environment using pyglet
@@ -745,6 +744,7 @@ class Environment(TorchVectorizedObject):
                     plot_range=plot_position_function_range,
                     cmap_range=plot_position_function_cmap_range,
                     cmap_alpha=plot_position_function_cmap_alpha,
+                    cmap_name=plot_position_function_cmap_name,
                 )
             )
 
@@ -763,7 +763,9 @@ class Environment(TorchVectorizedObject):
         # render to display or array
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
-    def plot_function(self, f, precision, plot_range, cmap_range, cmap_alpha):
+    def plot_function(
+        self, f, precision, plot_range, cmap_range, cmap_alpha, cmap_name
+    ):
         from vmas.simulator.rendering import render_function_util
 
         if plot_range is None:
@@ -780,6 +782,7 @@ class Environment(TorchVectorizedObject):
             plot_range=plot_range,
             cmap_range=cmap_range,
             cmap_alpha=cmap_alpha,
+            cmap_name=cmap_name,
         )
         return geom
 
