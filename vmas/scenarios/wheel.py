@@ -1,4 +1,4 @@
-#  Copyright (c) 2022.
+#  Copyright (c) 2022-2023.
 #  ProrokLab (https://www.proroklab.org/)
 #  All rights reserved.
 
@@ -23,7 +23,7 @@ class Scenario(BaseScenario):
         # Add agents
         for i in range(n_agents):
             # Constraint: all agents have same action range and multiplier
-            agent = Agent(name=f"agent {i}", u_multiplier=0.6, shape=Sphere(0.03))
+            agent = Agent(name=f"agent_{i}", u_multiplier=0.6, shape=Sphere(0.03))
             world.add_agent(agent)
         # Add landmarks
         self.line = Landmark(
@@ -83,7 +83,6 @@ class Scenario(BaseScenario):
         return -self.rew
 
     def observation(self, agent: Agent):
-
         line_end_1 = torch.cat(
             [
                 (self.line_length / 2) * torch.cos(self.line.state.rot),
@@ -120,7 +119,10 @@ class HeuristicPolicy(BaseHeuristicPolicy):
         pos_end2 = pos_end2_agent + pos_agent
 
         pos_end2_shifted = TorchUtils.rotate_vector(
-            pos_end2, torch.tensor(torch.pi / 4, device=observation.device)
+            pos_end2,
+            torch.tensor(torch.pi / 4, device=observation.device).expand(
+                pos_end2.shape[0]
+            ),
         )
 
         pos_end2_shifted_agent = pos_end2_shifted - pos_agent

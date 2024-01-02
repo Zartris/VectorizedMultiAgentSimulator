@@ -41,7 +41,7 @@ class Scenario(BaseScenario):
         world = World(batch_dim, device, dt=self.dt, substeps=10, drag=0.25)
         for i in range(self.n_agents):
             agent = Agent(
-                name=f"agent {i}",
+                name=f"agent_{i}",
                 collide=True,
                 shape=Sphere(1.),
                 render_action=True,
