@@ -5,6 +5,7 @@ import importlib
 import os
 from abc import ABC, abstractmethod
 from enum import Enum
+import re
 from typing import List, Tuple, Union, Dict, Sequence
 
 import numpy as np
@@ -31,7 +32,6 @@ LINEAR_FRICTION = 0.0
 ANGULAR_FRICTION = 0.0
 
 DEVICE_TYPING = Union[torch.device, str, int]
-
 
 AGENT_OBS_TYPE = Union[Tensor, Dict[str, Tensor]]
 AGENT_INFO_TYPE = Dict[str, Tensor]
@@ -130,12 +130,12 @@ def save_video(name: str, frame_list: List[np.array], fps: int):
 
 
 def x_to_rgb_colormap(
-    x: np.ndarray,
-    low: float = None,
-    high: float = None,
-    alpha: float = 1.0,
-    cmap_name: str = "viridis",
-    cmap_res: int = 10,
+        x: np.ndarray,
+        low: float = None,
+        high: float = None,
+        alpha: float = 1.0,
+        cmap_name: str = "viridis",
+        cmap_res: int = 10,
 ):
     colormap = cm.get_cmap(cmap_name, cmap_res)(range(cmap_res))[:, :-1]
     if low is None:
@@ -194,7 +194,7 @@ class TorchUtils:
     @staticmethod
     def cross(vector_a: Tensor, vector_b: Tensor):
         return (
-            vector_a[..., X] * vector_b[..., Y] - vector_a[..., Y] * vector_b[..., X]
+                vector_a[..., X] * vector_b[..., Y] - vector_a[..., Y] * vector_b[..., X]
         ).unsqueeze(-1)
 
     @staticmethod
@@ -225,13 +225,13 @@ class ScenarioUtils:
     def spawn_entities_randomly(
             entities,
             world,
-            env_index: int,
+            env_index: Union[int, list, Tensor],
             min_dist_between_entities: float,
             x_bounds: Tuple[int, int],
             y_bounds: Tuple[int, int],
             occupied_positions: Tensor = None,
     ):
-        batch_size = world.batch_dim if env_index is None else 1
+        batch_size = world.batch_dim if env_index is None else len(env_index)
 
         if occupied_positions is None:
             occupied_positions = torch.zeros(
@@ -239,13 +239,14 @@ class ScenarioUtils:
             )
 
         for entity in entities:
-            pos = ScenarioUtils.find_random_pos_for_entity(
+            pos, _ = ScenarioUtils.find_random_pos_for_entity(
                 occupied_positions,
                 env_index,
                 world,
                 min_dist_between_entities,
                 x_bounds,
                 y_bounds,
+                num_tries=-1, # -1 is a very large number
             )
             occupied_positions = torch.cat([occupied_positions, pos], dim=1)
             entity.set_pos(pos.squeeze(1), batch_index=env_index)
@@ -253,16 +254,20 @@ class ScenarioUtils:
     @staticmethod
     def find_random_pos_for_entity(
             occupied_positions: Union[torch.Tensor, None],
-            env_index: int,
+            env_index: Union[int, list, Tensor],
             world,
             min_dist_between_entities: float,
             x_bounds: Tuple[int, int],
             y_bounds: Tuple[int, int],
+            num_tries: int = 100,
     ):
-        batch_size = world.batch_dim if env_index is None else 1
-
+        batch_size = world.batch_dim if env_index is None else len(env_index)
         pos = None
-        while True:
+        
+        if num_tries < 0:
+            num_tries = 10000000000000000
+            
+        for _ in range(num_tries):
             proposed_pos = torch.cat(
                 [
                     torch.empty(
@@ -288,8 +293,9 @@ class ScenarioUtils:
             if torch.any(overlaps, dim=0):
                 pos[overlaps] = proposed_pos[overlaps]
             else:
-                break
-        return pos
+                return pos.squeeze(1), overlaps
+        not_done = overlaps
+        return pos.squeeze(1), not_done
 
     @staticmethod
     def format_obs(obs, index: int = None):
@@ -337,40 +343,7 @@ class ScenarioUtils:
         # values = distance_test[not_close] - distance_grid[not_close]
         # max_value = values.max()
         return distance_grid, index_grid
-
-    @staticmethod
-    def find_position_torch_adjusted(distance_field, occupied_positions, x_bounds, y_bounds, steps=100,
-                                     learning_rate=2):
-        device = distance_field.device
-        pos = torch.tensor([np.random.uniform(*x_bounds), np.random.uniform(*y_bounds)], requires_grad=True,
-                           device=device)
-        optimizer = torch.optim.Adam([pos], lr=learning_rate)
-
-        for _ in range(steps):
-            optimizer.zero_grad()
-            clamped_pos = torch.stack([pos[0].clamp(*x_bounds), pos[1].clamp(*y_bounds)])
-            normalized_pos = (clamped_pos - torch.tensor([x_bounds[0], y_bounds[0]], device=device)) / (
-                    torch.tensor([x_bounds[1], y_bounds[1]], device=device) - torch.tensor(
-                [x_bounds[0], y_bounds[0]], device=device))
-
-            # distance = torch.nn.functional.grid_sample(distance_field.unsqueeze(0).unsqueeze(0),
-            #                                            normalized_pos.view(1, 1, 1, 2), padding_mode='border',
-            #                                            align_corners=True).squeeze()
-
-            # x, y = torch.round(normalized_pos * 999)
-            # test_dist = distance_field[x, y]
-
-            actual_distance = torch.cdist(occupied_positions, clamped_pos.unsqueeze(0)).min()
-            # print(
-            # f"Actual Distance: {actual_distance.item()}, Test Distance: {test_dist.item()}, diff: {test_dist.item() - actual_distance.item()}")
-            loss = -actual_distance
-            loss.backward()
-            optimizer.step()
-
-        final_pos = clamped_pos.detach()
-        actual_distance = torch.cdist(occupied_positions, final_pos.unsqueeze(0)).min()
-        return final_pos, actual_distance.item()
-
+    
     @staticmethod
     def find_position_from_distance_field(distance_field, index_grid, min_dist):
 
@@ -442,3 +415,79 @@ class ScenarioUtils:
                 print("Failed to find a free position")
                 return None
         return pos
+
+    @staticmethod
+    def try_find_pos_for_all_obstacles(
+            occupied_positions: Union[torch.Tensor, None],
+            env_index: int,
+            world,
+            min_dist_between_entities: torch.Tensor,
+            x_bounds: Tuple[int, int],
+            y_bounds: Tuple[int, int],
+            resolution: int = 1000,
+            independent: bool = False,
+    ):
+        batch_size = world.batch_dim if env_index is None else 1
+        if batch_size > 1:
+            final_pos = torch.zeros((batch_size, min_dist_between_entities.shape[0], 2), device=world.device)
+            for i in range(batch_size):
+                pos = ScenarioUtils.try_find_pos_for_all_obstacles(
+                    occupied_positions[i],
+                    env_index=i,
+                    world=world,
+                    min_dist_between_entities=min_dist_between_entities,
+                    x_bounds=x_bounds,
+                    y_bounds=y_bounds,
+                    resolution=resolution,
+                )
+                if pos is None:
+                    return None
+                final_pos[i] = pos
+            return final_pos
+
+        # Example Usage
+        distance_field, index_grid = ScenarioUtils.create_distance_field_torch(occupied_positions, x_bounds, y_bounds,
+                                                                               resolution=resolution)
+
+        pos = torch.zeros(min_dist_between_entities.shape[0], 2, device=world.device)
+        for i, min_d in enumerate(min_dist_between_entities):
+            
+            proposed_pos = ScenarioUtils.find_position_from_distance_field(distance_field, index_grid,
+                                                                           min_d)
+            if proposed_pos is None:
+                return None
+            proposed_pos = proposed_pos.view(1, 1, 2)
+            # dist = torch.cdist(occupied_positions, proposed_pos)
+            # overlaps = torch.any((dist < min_d).squeeze(2), dim=1)
+            # if torch.any(overlaps, dim=0):
+                # print("Failed to find a free position")
+                # return None
+            pos[i] = proposed_pos.squeeze()
+            if not independent:
+                # distance_field = ScenarioUtils.update_distance_field_vectorized(distance_field, proposed_pos.squeeze(), x_bounds, y_bounds, resolution=resolution, update_radius=50)
+                occupied_positions = torch.cat([occupied_positions, proposed_pos], dim=1)
+                distance_field, index_grid = ScenarioUtils.create_distance_field_torch(occupied_positions, x_bounds, y_bounds,
+                                                                               resolution=resolution)
+        return pos
+    
+    @staticmethod
+    def update_distance_field_vectorized(distance_field, new_position, x_bounds, y_bounds, resolution=100, update_radius=5):
+        device = distance_field.device
+        x = torch.linspace(x_bounds[0], x_bounds[1], resolution, device=device)
+        y = torch.linspace(y_bounds[0], y_bounds[1], resolution, device=device)
+        xx, yy = torch.meshgrid(x, y)
+        grid_points = torch.stack((xx.flatten(), yy.flatten()), dim=1)
+
+        # Calculate distances from the new position to all grid points
+        new_distances = torch.norm(grid_points - new_position, dim=1).view(resolution, resolution)
+
+        # Determine the update region
+        x_index = int(((new_position[0] - x_bounds[0]) / (x_bounds[1] - x_bounds[0])) * resolution)
+        y_index = int(((new_position[1] - y_bounds[0]) / (y_bounds[1] - y_bounds[0])) * resolution)
+        x_start, x_end = max(0, x_index - update_radius), min(resolution, x_index + update_radius + 1)
+        y_start, y_end = max(0, y_index - update_radius), min(resolution, y_index + update_radius + 1)
+
+        # Update the distance field
+        distance_field[y_start:y_end, x_start:x_end] = torch.min(distance_field[y_start:y_end, x_start:x_end], new_distances[y_start:y_end, x_start:x_end])
+
+        return distance_field

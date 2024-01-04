@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import typing
 from abc import ABC, abstractmethod
-from typing import Callable, List, Tuple
+from typing import Callable, List, Tuple, Union
 
 import torch
 from line_profiler_pycharm import profile
@@ -65,7 +65,7 @@ class TorchVectorizedObject(object):
     def device(self, device: torch.device):
         self._device = device
 
-    def _check_batch_index(self, batch_index: typing.Union[int, list, Tensor]):
+    def _check_batch_index(self, batch_index: Union[int, list, Tensor]):
         if batch_index is not None:
             if isinstance(batch_index, list):
                 for b in batch_index:
@@ -659,20 +659,20 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     def _reset(self, env_index: int):
         self.state._reset(env_index)
 
-    def set_pos(self, pos: Tensor, batch_index: int):
+    def set_pos(self, pos: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.pos, self.state, pos, batch_index)
 
-    def set_vel(self, vel: Tensor, batch_index: int):
+    def set_vel(self, vel: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.vel, self.state, vel, batch_index)
 
-    def set_rot(self, rot: Tensor, batch_index: int):
+    def set_rot(self, rot: Tensor, batch_index:Union[int, list, Tensor]):
         self._set_state_property(EntityState.rot, self.state, rot, batch_index)
 
-    def set_ang_vel(self, ang_vel: Tensor, batch_index: int):
+    def set_ang_vel(self, ang_vel: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.ang_vel, self.state, ang_vel, batch_index)
 
     def _set_state_property(
-            self, prop, entity: EntityState, new: Tensor, batch_index: int
+            self, prop, entity: EntityState, new: Tensor, batch_index: Union[int, list, Tensor]
     ):
         assert (
                 self.batch_dim is not None
