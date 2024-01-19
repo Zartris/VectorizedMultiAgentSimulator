@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import typing
 from abc import ABC, abstractmethod
-from typing import Callable, List, Tuple
+from typing import Callable, List, Tuple, Union
 
 import torch
 from line_profiler_pycharm import profile
@@ -65,7 +65,7 @@ class TorchVectorizedObject(object):
     def device(self, device: torch.device):
         self._device = device
 
-    def _check_batch_index(self, batch_index: typing.Union[int, list, Tensor]):
+    def _check_batch_index(self, batch_index: Union[int, list, Tensor]):
         if batch_index is not None:
             if isinstance(batch_index, list):
                 for b in batch_index:
@@ -130,7 +130,7 @@ class Box(Shape):
         return anchor[X] * self.length / 2, anchor[Y] * self.width / 2
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 12) * mass * (self.length ** 2 + self.width ** 2)
+        return (1 / 12) * mass * (self.length**2 + self.width**2)
 
     def circumscribed_radius(self):
         return math.sqrt((self.length / 2) ** 2 + (self.width / 2) ** 2)
@@ -167,7 +167,7 @@ class Sphere(Shape):
         return tuple(delta.tolist())
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 2) * mass * self.radius ** 2
+        return (1 / 2) * mass * self.radius**2
 
     def circumscribed_radius(self):
         return self.radius
@@ -194,7 +194,7 @@ class Line(Shape):
         return self._width
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 12) * mass * (self.length ** 2)
+        return (1 / 12) * mass * (self.length**2)
 
     def circumscribed_radius(self):
         return self.length / 2
@@ -231,14 +231,14 @@ class EntityState(TorchVectorizedObject):
     @pos.setter
     def pos(self, pos: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                pos.shape[0] == self._batch_dim
+            pos.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {pos.shape[0]}, expected {self._batch_dim}"
         if self._vel is not None:
             assert (
-                    pos.shape == self._vel.shape
+                pos.shape == self._vel.shape
             ), f"Position shape must match velocity shape, got {pos.shape} expected {self._vel.shape}"
 
         self._pos = pos.to(self._device)
@@ -250,14 +250,14 @@ class EntityState(TorchVectorizedObject):
     @vel.setter
     def vel(self, vel: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                vel.shape[0] == self._batch_dim
+            vel.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {vel.shape[0]}, expected {self._batch_dim}"
         if self._pos is not None:
             assert (
-                    vel.shape == self._pos.shape
+                vel.shape == self._pos.shape
             ), f"Velocity shape must match position shape, got {vel.shape} expected {self._pos.shape}"
 
         self._vel = vel.to(self._device)
@@ -269,10 +269,10 @@ class EntityState(TorchVectorizedObject):
     @ang_vel.setter
     def ang_vel(self, ang_vel: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                ang_vel.shape[0] == self._batch_dim
+            ang_vel.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {ang_vel.shape[0]}, expected {self._batch_dim}"
 
         self._ang_vel = ang_vel.to(self._device)
@@ -284,10 +284,10 @@ class EntityState(TorchVectorizedObject):
     @rot.setter
     def rot(self, rot: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                rot.shape[0] == self._batch_dim
+            rot.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {rot.shape[0]}, expected {self._batch_dim}"
 
         self._rot = rot.to(self._device)
@@ -317,7 +317,7 @@ class EntityState(TorchVectorizedObject):
 
 class AgentState(EntityState):
     def __init__(
-            self,
+        self,
     ):
         super().__init__()
         # communication utterance
@@ -330,10 +330,10 @@ class AgentState(EntityState):
     @c.setter
     def c(self, c: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                c.shape[0] == self._batch_dim
+            c.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {c.shape[0]}, expected {self._batch_dim}"
 
         self._c = c.to(self._device)
@@ -659,20 +659,20 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     def _reset(self, env_index: int):
         self.state._reset(env_index)
 
-    def set_pos(self, pos: Tensor, batch_index: int):
+    def set_pos(self, pos: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.pos, self.state, pos, batch_index)
 
-    def set_vel(self, vel: Tensor, batch_index: int):
+    def set_vel(self, vel: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.vel, self.state, vel, batch_index)
 
-    def set_rot(self, rot: Tensor, batch_index: int):
+    def set_rot(self, rot: Tensor, batch_index:Union[int, list, Tensor]):
         self._set_state_property(EntityState.rot, self.state, rot, batch_index)
 
-    def set_ang_vel(self, ang_vel: Tensor, batch_index: int):
+    def set_ang_vel(self, ang_vel: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.ang_vel, self.state, ang_vel, batch_index)
 
     def _set_state_property(
-            self, prop, entity: EntityState, new: Tensor, batch_index: int
+            self, prop, entity: EntityState, new: Tensor, batch_index: Union[int, list, Tensor]
     ):
         assert (
                 self.batch_dim is not None
@@ -996,6 +996,7 @@ class Agent(Entity):
             for sensor in self._sensors:
                 geoms += sensor.render(env_index=env_index)
         if self._render_action and self.action.u is not None:
+            # print(self.action.u[env_index])
             velocity = rendering.Line(
                 self.state.pos[env_index],
                 self.state.pos[env_index]
@@ -1070,7 +1071,6 @@ class World(TorchVectorizedObject):
         self.entity_index_map = {}
         self.sim_time = torch.zeros(self._batch_dim)
 
-
     def add_agent(self, agent: Agent):
         """Only way to add agents to the world"""
         agent.batch_dim = self._batch_dim
@@ -1098,31 +1098,26 @@ class World(TorchVectorizedObject):
                 }
             )
 
-    def reset(self, env_index: int):
-        for e in self.entities:
-            e._reset(env_index)
+    def reset(self, env_index: typing.Union[int, list, Tensor]):
+        if isinstance(env_index, int):
+            for e in self.entities:
+                e._reset(env_index)
+            self.sim_time[env_index] = 0.0
 
-    # def reset(self, env_index: typing.Union[int, list, Tensor]):
-    #     if isinstance(env_index, int):
-    #         for e in self.entities:
-    #             e._reset(env_index)
-    #         self.sim_time[env_index] = 0.0
-    #
-    #     elif isinstance(env_index, list):
-    #         for ei in env_index:
-    #             for e in self.entities:
-    #                 e._reset(ei)
-    #             self.sim_time[ei] = 0.0
-    #
-    #     elif isinstance(env_index, Tensor):
-    #         if env_index.nelement() == 1:
-    #             self.reset(env_index.item())
-    #         else:
-    #             for ei in range(env_index.shape[0]):
-    #                 for e in self.entities:
-    #                     e._reset(ei)
-    #                 self.sim_time[ei] = 0.0
+        elif isinstance(env_index, list):
+            for ei in env_index:
+                for e in self.entities:
+                    e._reset(ei)
+                self.sim_time[ei] = 0.0
 
+        elif isinstance(env_index, Tensor):
+            if env_index.nelement() == 1:
+                self.reset(env_index.item())
+            else:
+                for ei in range(env_index.shape[0]):
+                    for e in self.entities:
+                        e._reset(ei)
+                    self.sim_time[ei] = 0.0
 
     @property
     def agents(self) -> List[Agent]:
@@ -1532,7 +1527,6 @@ class World(TorchVectorizedObject):
     def step(self):
         self.sim_time = self.sim_time + self._dt
         self.entity_index_map = {e: i for i, e in enumerate(self.entities)}
-
         # forces
         self.force = torch.zeros(
             self._batch_dim,
@@ -1568,10 +1562,9 @@ class World(TorchVectorizedObject):
                 # apply gravity
                 self._apply_gravity(entity, i)
 
-                # self._apply_environment_force(entity, i)
+                #self._apply_environment_force(entity, i)
 
             self._apply_vectorized_enviornment_force()
-
             for i, entity in enumerate(self.entities):
                 # integrate physical state
                 if True and hasattr(entity, "dynamics") and hasattr(entity.dynamics, "integrate_state"):
@@ -2367,12 +2360,12 @@ class World(TorchVectorizedObject):
         return True
 
     def _get_constraint_forces(
-        self,
-        pos_a: Tensor,
-        pos_b: Tensor,
-        dist_min,
-        force_multiplier: float,
-        attractive: bool = False,
+            self,
+            pos_a: Tensor,
+            pos_b: Tensor,
+            dist_min,
+            force_multiplier: float,
+            attractive: bool = False,
     ) -> Tensor:
         min_dist = 1e-6
         delta_pos = pos_a - pos_b

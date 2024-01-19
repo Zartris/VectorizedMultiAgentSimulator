@@ -450,13 +450,13 @@ class Grid(Geom):
 
 
 def render_function_util(
-    f: Callable,
-    plot_range: Union[
-        float, Tuple[float, float], Tuple[Tuple[float, float], Tuple[float, float]]
-    ],
-    precision: float = 0.01,
-    cmap_range: Optional[Tuple[float, float]] = None,
-    cmap_alpha: float = 1.0,
+        f: Callable,
+        plot_range: Union[
+            float, Tuple[float, float], Tuple[Tuple[float, float], Tuple[float, float]]
+        ],
+        precision: float = 0.01,
+        cmap_range: Optional[Tuple[float, float]] = None,
+        cmap_alpha: float = 1.0,
     cmap_name: str = "viridis",
 ):
     if isinstance(plot_range, int) or isinstance(plot_range, float):

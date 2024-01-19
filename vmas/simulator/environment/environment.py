@@ -58,6 +58,7 @@ class Environment(TorchVectorizedObject):
         self.reset(seed=seed)
 
         # configure spaces
+        # TODO:: change to control action space
         self.action_space = self.get_action_space()
         self.control_action_space = self.get_control_action_space()
         self.observation_space = self.get_observation_space()
@@ -595,22 +596,22 @@ class Environment(TorchVectorizedObject):
                 agent.action.c = comm_action
 
     def render(
-        self,
-        mode="human",
-        env_index=0,
-        agent_index_focus: int = None,
-        visualize_when_rgb: bool = False,
-        plot_position_function: Callable = None,
-        plot_position_function_precision: float = 0.01,
-        plot_position_function_range: Optional[
-            Union[
-                float,
-                Tuple[float, float],
-                Tuple[Tuple[float, float], Tuple[float, float]],
-            ]
-        ] = None,
-        plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
-        plot_position_function_cmap_alpha: Optional[float] = 1.0,
+            self,
+            mode="human",
+            env_index=0,
+            agent_index_focus: int = None,
+            visualize_when_rgb: bool = False,
+            plot_position_function: Callable = None,
+            plot_position_function_precision: float = 0.01,
+            plot_position_function_range: Optional[
+                Union[
+                    float,
+                    Tuple[float, float],
+                    Tuple[Tuple[float, float], Tuple[float, float]],
+                ]
+            ] = None,
+            plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
+            plot_position_function_cmap_alpha: Optional[float] = 1.0,
         plot_position_function_cmap_name: Optional[str] = "viridis",
     ):
         """
