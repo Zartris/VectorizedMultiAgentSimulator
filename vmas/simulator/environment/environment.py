@@ -44,6 +44,18 @@ class Environment(TorchVectorizedObject):
             dict_spaces: bool = False,
             **kwargs,
     ):
+        # custom parameters
+        self.use_inner_loop = kwargs.get("use_inner_loop", False)
+        self.render_inner_loop = kwargs.get("render_inner_loop", False)
+        self.render_env_index = kwargs.get("render_env_index", 0)
+
+        # rendering
+        self.viewer = None
+        self.headless = None
+        self.visible_display = None
+        self.text_lines = None
+
+
         self.scenario = scenario
         self.num_envs = num_envs
         TorchVectorizedObject.__init__(self, num_envs, torch.device(device))
@@ -63,12 +75,7 @@ class Environment(TorchVectorizedObject):
         self.control_action_space = self.get_control_action_space()
         self.observation_space = self.get_observation_space()
 
-        # rendering
-        self.viewer = None
-        self.headless = None
-        self.visible_display = None
-        self.text_lines = None
-        self.use_inner_loop = kwargs.get("use_inner_loop", False)
+
 
     def reset(
             self,
@@ -93,6 +100,9 @@ class Environment(TorchVectorizedObject):
             get_rewards=False,
             get_dones=return_dones,
         )
+        if self.render_inner_loop:
+            frame = self.render(mode="human", visualize_when_rgb=True, env_index=self.render_env_index)
+            result.append([frame])
         return result[0] if result and len(result) == 1 else result
 
     def unpacked_index(self, index):
@@ -131,6 +141,9 @@ class Environment(TorchVectorizedObject):
             get_rewards=False,
             get_dones=return_dones,
         )
+        if self.render_inner_loop and self.render_env_index in index:
+            frame = self.render(mode="human", visualize_when_rgb=True, env_index=self.render_env_index)
+            result.append([frame])
         if return_observations and not return_info and not return_dones:
             return result[0]
 
@@ -195,7 +208,7 @@ class Environment(TorchVectorizedObject):
         random.seed(seed)
         return [seed]
 
-    @profile
+    # @profile
     def step(self, actions: Union[List, Dict]):
         """Performs a vectorized step on all sub environments using `actions`.
         Args:
@@ -234,6 +247,7 @@ class Environment(TorchVectorizedObject):
         rew_index = 0
         dones = []
         infos = []
+        frames = []
         for inner_epoch in range(inner_epochs):
             # extract the actions for this inner epoch
             record_obs = (inner_epoch + 1) % time_to_record_obs == 0
@@ -252,6 +266,13 @@ class Environment(TorchVectorizedObject):
 
             dones = inner_dones
             infos.append(inner_infos)
+            if self.render_inner_loop:
+                frame = self.render(
+                    mode="human",
+                    visualize_when_rgb=True,
+                    env_index=self.render_env_index
+                )
+                frames.append(frame)
         debug = 0
         for agent in self.world.agents:
             agent.pos_history = torch.stack(agent.pos_history)
@@ -273,7 +294,7 @@ class Environment(TorchVectorizedObject):
         # )
         # print(f"Dones len (n_envs): {len(dones)}, dones[0] (done env 0): {dones[0]}")
         # print(f"Info len (n_agents): {len(infos)}, info[0] (infos agent 0): {infos[0]}")
-        return obs, rewards, dones, infos
+        return obs, rewards, dones, infos, frames
 
     @profile
     def _step_inner(self, trajectories, inner_epoch, get_obs=True):
@@ -612,7 +633,7 @@ class Environment(TorchVectorizedObject):
             ] = None,
             plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
             plot_position_function_cmap_alpha: Optional[float] = 1.0,
-        plot_position_function_cmap_name: Optional[str] = "viridis",
+            plot_position_function_cmap_name: Optional[str] = "viridis",
     ):
         """
         Render function for environment using pyglet
@@ -765,7 +786,7 @@ class Environment(TorchVectorizedObject):
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
     def plot_function(
-        self, f, precision, plot_range, cmap_range, cmap_alpha, cmap_name
+            self, f, precision, plot_range, cmap_range, cmap_alpha, cmap_name
     ):
         from vmas.simulator.rendering import render_function_util
 

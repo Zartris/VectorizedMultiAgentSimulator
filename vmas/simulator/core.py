@@ -289,7 +289,8 @@ class EntityState(TorchVectorizedObject):
         assert (
             rot.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {rot.shape[0]}, expected {self._batch_dim}"
-
+        # Normalize angle between -pi and pi
+        rot = torch.fmod(rot + torch.pi, 2 * torch.pi) - torch.pi
         self._rot = rot.to(self._device)
 
     def _reset(self, env_index: typing.Optional[int]):
