@@ -79,6 +79,7 @@ class Environment(TorchVectorizedObject):
             return_observations: bool = True,
             return_info: bool = False,
             return_dones: bool = False,
+            return_frame: bool = False,
     ):
         """
         Resets the environment in a vectorized way
@@ -100,8 +101,10 @@ class Environment(TorchVectorizedObject):
             frame = self.render(
                 mode="human", visualize_when_rgb=True, env_index=self.render_env_index
             )
-            result.append([frame])
-        return result[0] if result and len(result) == 1 else result
+            if return_frame:
+                result.append([frame])
+        return_list = [item for item in result if item is not None]
+        return return_list[0] if len(return_list) == 1 else return_list
 
     def unpacked_index(self, index):
         if isinstance(index, int):
