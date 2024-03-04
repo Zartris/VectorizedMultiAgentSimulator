@@ -34,20 +34,21 @@ class Environment(TorchVectorizedObject):
     }
 
     def __init__(
-        self,
-        scenario: BaseScenario,
-        num_envs: int = 32,
-        device: DEVICE_TYPING = "cpu",
-        max_steps: Optional[int] = None,
-        continuous_actions: bool = True,
-        seed: Optional[int] = None,
-        dict_spaces: bool = False,
-        **kwargs,
+            self,
+            scenario: BaseScenario,
+            num_envs: int = 32,
+            device: DEVICE_TYPING = "cpu",
+            max_steps: Optional[int] = None,
+            continuous_actions: bool = True,
+            seed: Optional[int] = None,
+            dict_spaces: bool = False,
+            **kwargs,
     ):
         # custom parameters
         self.use_inner_loop = kwargs.get("use_inner_loop", False)
         self.render_inner_loop = kwargs.get("render_inner_loop", False)
         self.render_env_index = kwargs.get("render_env_index", 0)
+        self.headless_mode = kwargs.get("headless_mode", False)
 
         # rendering
         self.viewer = None
@@ -74,12 +75,12 @@ class Environment(TorchVectorizedObject):
         self.observation_space = self.get_observation_space()
 
     def reset(
-        self,
-        seed: Optional[int] = None,
-        return_observations: bool = True,
-        return_info: bool = False,
-        return_dones: bool = False,
-        return_frame: bool = False,
+            self,
+            seed: Optional[int] = None,
+            return_observations: bool = True,
+            return_info: bool = False,
+            return_dones: bool = False,
+            return_frame: bool = False,
     ):
         """
         Resets the environment in a vectorized way
@@ -99,7 +100,7 @@ class Environment(TorchVectorizedObject):
         )
         if self.render_inner_loop:
             frame = self.render(
-                mode="human", visualize_when_rgb=True, env_index=self.render_env_index
+                mode="rgb_array", visualize_when_rgb=not self.headless_mode, env_index=self.render_env_index
             )
             if return_frame:
                 result.append([frame])
@@ -117,11 +118,11 @@ class Environment(TorchVectorizedObject):
             raise NotImplementedError
 
     def reset_at(
-        self,
-        index: Union[int, list, Tensor],
-        return_observations: bool = True,
-        return_info: bool = False,
-        return_dones: bool = False,
+            self,
+            index: Union[int, list, Tensor],
+            return_observations: bool = True,
+            return_info: bool = False,
+            return_dones: bool = False,
     ):
         """
         Resets the environment at index
@@ -153,12 +154,12 @@ class Environment(TorchVectorizedObject):
         return result[0] if result and len(result) == 1 else result
 
     def get_from_scenario(
-        self,
-        get_observations: bool = False,
-        get_rewards: bool = False,
-        get_infos: bool = False,
-        get_dones: bool = False,
-        dict_agent_names: Optional[bool] = None,
+            self,
+            get_observations: bool = False,
+            get_rewards: bool = False,
+            get_infos: bool = False,
+            get_dones: bool = False,
+            dict_agent_names: Optional[bool] = None,
     ):
         if not get_infos and not get_dones and not get_rewards and not get_observations:
             return
@@ -213,7 +214,8 @@ class Environment(TorchVectorizedObject):
         return [seed]
 
     # @profile
-    def step(self, actions: Union[List, Dict]):
+    def step(self, actions: Union[List, Dict], render_mode="rgb_array",
+             render_env_index=0):
         """Performs a vectorized step on all sub environments using `actions`.
         Args:
             actions: Is a list on len 'self.n_agents' of which each element is a torch.Tensor of shape
@@ -247,7 +249,7 @@ class Environment(TorchVectorizedObject):
 
         inner_epochs = 1 if actions.dim() != 4 else trajectories.shape[0]
         time_to_record_obs = (
-            inner_epochs / actions.shape[-2]
+                inner_epochs / actions.shape[-2]
         )  # predict_horizon_sec * predict_hz
 
         obs = [[] for _ in range(self.n_agents)]
@@ -260,6 +262,7 @@ class Environment(TorchVectorizedObject):
         infos = []
         frames = []
         for inner_epoch in range(inner_epochs):
+            # TODO:: add first reward call
             # extract the actions for this inner epoch
             record_obs = (inner_epoch + 1) % time_to_record_obs == 0
             inner_obs, inner_rewards, inner_dones, inner_infos = self._step_inner(
@@ -280,9 +283,9 @@ class Environment(TorchVectorizedObject):
             infos.append(inner_infos)
             if self.render_inner_loop:
                 frame = self.render(
-                    mode="human",
-                    visualize_when_rgb=True,
-                    env_index=self.render_env_index,
+                    mode=render_mode,
+                    visualize_when_rgb=not self.headless_mode,
+                    env_index=render_env_index,
                 )
                 frames.append(frame)
         debug = 0
@@ -354,12 +357,12 @@ class Environment(TorchVectorizedObject):
                         f"Agent '{agent.name}' not contained in action dict"
                     )
             assert (
-                len(actions_dict) == self.n_agents
+                    len(actions_dict) == self.n_agents
             ), f"Expecting actions for {self.n_agents}, got {len(actions_dict)} actions"
 
         # check if we have an action for each agent
         assert (
-            len(actions) == self.n_agents
+                len(actions) == self.n_agents
         ), f"Expecting actions for {self.n_agents}, got {len(actions)} actions"
 
         # check if actions are tensors and have the "correct" shape
@@ -372,7 +375,7 @@ class Environment(TorchVectorizedObject):
                 actions[i].unsqueeze_(-1)
             # check if actions have the correct shape
             assert (
-                actions[i].shape[0] == self.num_envs
+                    actions[i].shape[0] == self.num_envs
             ), f"Actions used in input of env must be of len {self.num_envs}, got {actions[i].shape[0]}"
             # check if actions have the correct shape
             assert actions[i].shape[1:] == self.get_agent_action_size(self.agents[i]), (
@@ -385,7 +388,7 @@ class Environment(TorchVectorizedObject):
         # check if actions are tensors and have the "correct" shape
         # check if we have an action for each agent
         assert (
-            len(control_actions) == self.n_agents
+                len(control_actions) == self.n_agents
         ), f"Expecting actions for {self.n_agents}, got {len(control_actions)} actions"
 
         # check if actions are tensors and have the "correct" shape
@@ -398,7 +401,7 @@ class Environment(TorchVectorizedObject):
                 control_actions[i].unsqueeze_(-1)
             # check if actions have the correct shape
             assert (
-                control_actions[i].shape[0] == self.num_envs
+                    control_actions[i].shape[0] == self.num_envs
             ), f"Actions used as control input of env must be of len {self.num_envs}, got {control_actions[i].shape[0]}"
             # check if actions have the correct shape
             assert control_actions[i].shape[-1] == self.get_agent_control_action_size(
@@ -462,8 +465,8 @@ class Environment(TorchVectorizedObject):
             + (self.world.dim_c if not agent.silent else 0)
             if self.continuous_actions
             else 1
-            + (1 if agent.action.u_rot_range != 0 else 0)
-            + (1 if not agent.silent else 0)
+                 + (1 if agent.action.u_rot_range != 0 else 0)
+                 + (1 if not agent.silent else 0)
         )
 
     def get_agent_action_size(self, agent: Agent):
@@ -494,13 +497,13 @@ class Environment(TorchVectorizedObject):
                 return spaces.Discrete(self.world.dim_p * 2 + 1)
             else:
                 actions = (
-                    [self.world.dim_p * 2 + 1]
-                    + ([3] if agent.u_rot_range != 0 else [])
-                    + (
-                        [self.world.dim_c]
-                        if not agent.silent and self.world.dim_c != 0
-                        else []
-                    )
+                        [self.world.dim_p * 2 + 1]
+                        + ([3] if agent.u_rot_range != 0 else [])
+                        + (
+                            [self.world.dim_c]
+                            if not agent.silent and self.world.dim_c != 0
+                            else []
+                        )
                 )
                 return spaces.MultiDiscrete(actions)
 
@@ -550,7 +553,7 @@ class Environment(TorchVectorizedObject):
         action_index = 0
 
         if self.continuous_actions:
-            physical_action = action[:, action_index : action_index + self.world.dim_p]
+            physical_action = action[:, action_index: action_index + self.world.dim_p]
             action_index += self.world.dim_p
             assert not torch.any(
                 torch.abs(physical_action) > agent.u_range
@@ -634,23 +637,23 @@ class Environment(TorchVectorizedObject):
                 agent.action.c = comm_action
 
     def render(
-        self,
-        mode="human",
-        env_index=0,
-        agent_index_focus: int = None,
-        visualize_when_rgb: bool = False,
-        plot_position_function: Callable = None,
-        plot_position_function_precision: float = 0.01,
-        plot_position_function_range: Optional[
-            Union[
-                float,
-                Tuple[float, float],
-                Tuple[Tuple[float, float], Tuple[float, float]],
-            ]
-        ] = None,
-        plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
-        plot_position_function_cmap_alpha: Optional[float] = 1.0,
-        plot_position_function_cmap_name: Optional[str] = "viridis",
+            self,
+            mode="human",
+            env_index=0,
+            agent_index_focus: int = None,
+            visualize_when_rgb: bool = False,
+            plot_position_function: Callable = None,
+            plot_position_function_precision: float = 0.01,
+            plot_position_function_range: Optional[
+                Union[
+                    float,
+                    Tuple[float, float],
+                    Tuple[Tuple[float, float], Tuple[float, float]],
+                ]
+            ] = None,
+            plot_position_function_cmap_range: Optional[Tuple[float, float]] = None,
+            plot_position_function_cmap_alpha: Optional[float] = 1.0,
+            plot_position_function_cmap_name: Optional[str] = "viridis",
     ):
         """
         Render function for environment using pyglet
@@ -681,7 +684,7 @@ class Environment(TorchVectorizedObject):
         """
         self._check_batch_index(env_index)
         assert (
-            mode in self.metadata["render.modes"]
+                mode in self.metadata["render.modes"]
         ), f"Invalid mode {mode} received, allowed modes: {self.metadata['render.modes']}"
         if agent_index_focus is not None:
             assert 0 <= agent_index_focus < self.n_agents, (
@@ -743,13 +746,13 @@ class Environment(TorchVectorizedObject):
                 [agent.shape.circumscribed_radius() for agent in self.world.agents]
             )
             viewer_size_fit = (
-                torch.stack(
-                    [
-                        torch.max(torch.abs(all_poses[:, X])),
-                        torch.max(torch.abs(all_poses[:, Y])),
-                    ]
-                )
-                + 2 * max_agent_radius
+                    torch.stack(
+                        [
+                            torch.max(torch.abs(all_poses[:, X])),
+                            torch.max(torch.abs(all_poses[:, Y])),
+                        ]
+                    )
+                    + 2 * max_agent_radius
             )
 
             viewer_size = torch.maximum(
@@ -803,7 +806,7 @@ class Environment(TorchVectorizedObject):
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
     def plot_function(
-        self, f, precision, plot_range, cmap_range, cmap_alpha, cmap_name
+            self, f, precision, plot_range, cmap_range, cmap_alpha, cmap_name
     ):
         from vmas.simulator.rendering import render_function_util
 
@@ -852,15 +855,15 @@ class Environment(TorchVectorizedObject):
             for agent in self.world.agents:
                 if not agent.silent:
                     assert (
-                        agent.state.c is not None
+                            agent.state.c is not None
                     ), "Agent has no comm state but it should"
                     if self.continuous_actions:
                         word = (
-                            "["
-                            + ",".join(
-                                [f"{comm:.2f}" for comm in agent.state.c[env_index]]
-                            )
-                            + "]"
+                                "["
+                                + ",".join(
+                            [f"{comm:.2f}" for comm in agent.state.c[env_index]]
+                        )
+                                + "]"
                         )
                     else:
                         word = ALPHABET[torch.argmax(agent.state.c[env_index]).item()]

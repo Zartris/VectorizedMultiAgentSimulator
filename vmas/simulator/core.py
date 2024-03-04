@@ -130,7 +130,7 @@ class Box(Shape):
         return anchor[X] * self.length / 2, anchor[Y] * self.width / 2
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 12) * mass * (self.length**2 + self.width**2)
+        return (1 / 12) * mass * (self.length ** 2 + self.width ** 2)
 
     def circumscribed_radius(self):
         return math.sqrt((self.length / 2) ** 2 + (self.width / 2) ** 2)
@@ -167,7 +167,7 @@ class Sphere(Shape):
         return tuple(delta.tolist())
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 2) * mass * self.radius**2
+        return (1 / 2) * mass * self.radius ** 2
 
     def circumscribed_radius(self):
         return self.radius
@@ -194,7 +194,7 @@ class Line(Shape):
         return self._width
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 12) * mass * (self.length**2)
+        return (1 / 12) * mass * (self.length ** 2)
 
     def circumscribed_radius(self):
         return self.length / 2
@@ -231,14 +231,14 @@ class EntityState(TorchVectorizedObject):
     @pos.setter
     def pos(self, pos: Tensor):
         assert (
-            self._batch_dim is not None and self._device is not None
+                self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-            pos.shape[0] == self._batch_dim
+                pos.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {pos.shape[0]}, expected {self._batch_dim}"
         if self._vel is not None:
             assert (
-                pos.shape == self._vel.shape
+                    pos.shape == self._vel.shape
             ), f"Position shape must match velocity shape, got {pos.shape} expected {self._vel.shape}"
 
         self._pos = pos.to(self._device)
@@ -250,14 +250,14 @@ class EntityState(TorchVectorizedObject):
     @vel.setter
     def vel(self, vel: Tensor):
         assert (
-            self._batch_dim is not None and self._device is not None
+                self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-            vel.shape[0] == self._batch_dim
+                vel.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {vel.shape[0]}, expected {self._batch_dim}"
         if self._pos is not None:
             assert (
-                vel.shape == self._pos.shape
+                    vel.shape == self._pos.shape
             ), f"Velocity shape must match position shape, got {vel.shape} expected {self._pos.shape}"
 
         self._vel = vel.to(self._device)
@@ -269,10 +269,10 @@ class EntityState(TorchVectorizedObject):
     @ang_vel.setter
     def ang_vel(self, ang_vel: Tensor):
         assert (
-            self._batch_dim is not None and self._device is not None
+                self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-            ang_vel.shape[0] == self._batch_dim
+                ang_vel.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {ang_vel.shape[0]}, expected {self._batch_dim}"
 
         self._ang_vel = ang_vel.to(self._device)
@@ -284,10 +284,10 @@ class EntityState(TorchVectorizedObject):
     @rot.setter
     def rot(self, rot: Tensor):
         assert (
-            self._batch_dim is not None and self._device is not None
+                self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-            rot.shape[0] == self._batch_dim
+                rot.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {rot.shape[0]}, expected {self._batch_dim}"
         # Normalize angle between -pi and pi
         rot = torch.fmod(rot + torch.pi, 2 * torch.pi) - torch.pi
@@ -318,7 +318,7 @@ class EntityState(TorchVectorizedObject):
 
 class AgentState(EntityState):
     def __init__(
-        self,
+            self,
     ):
         super().__init__()
         # communication utterance
@@ -331,10 +331,10 @@ class AgentState(EntityState):
     @c.setter
     def c(self, c: Tensor):
         assert (
-            self._batch_dim is not None and self._device is not None
+                self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-            c.shape[0] == self._batch_dim
+                c.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {c.shape[0]}, expected {self._batch_dim}"
 
         self._c = c.to(self._device)
@@ -390,7 +390,6 @@ class Action(TorchVectorizedObject):
         self._u_rot = None
         # communication_action
         self._c = None
-
 
     @property
     def u(self):
@@ -666,7 +665,7 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     def set_vel(self, vel: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.vel, self.state, vel, batch_index)
 
-    def set_rot(self, rot: Tensor, batch_index:Union[int, list, Tensor]):
+    def set_rot(self, rot: Tensor, batch_index: Union[int, list, Tensor]):
         self._set_state_property(EntityState.rot, self.state, rot, batch_index)
 
     def set_ang_vel(self, ang_vel: Tensor, batch_index: Union[int, list, Tensor]):
@@ -1032,6 +1031,7 @@ class World(TorchVectorizedObject):
         assert batch_dim > 0, f"Batch dim must be greater than 0, got {batch_dim}"
 
         super().__init__(batch_dim, device)
+        self.first_reward_calculation = True
         # list of agents and entities (can change at execution-time!)
         self._agents = []
         self._landmarks = []
@@ -1100,6 +1100,7 @@ class World(TorchVectorizedObject):
             )
 
     def reset(self, env_index: typing.Union[int, list, Tensor]):
+        self.first_reward_calculation = True
         if isinstance(env_index, int):
             for e in self.entities:
                 e._reset(env_index)
@@ -1526,6 +1527,7 @@ class World(TorchVectorizedObject):
     # update state of the world
     @profile
     def step(self):
+        self.first_reward_calculation = True
         self.sim_time = self.sim_time + self._dt
         self.entity_index_map = {e: i for i, e in enumerate(self.entities)}
         # forces
@@ -1563,7 +1565,7 @@ class World(TorchVectorizedObject):
                 # apply gravity
                 self._apply_gravity(entity, i)
 
-                #self._apply_environment_force(entity, i)
+                # self._apply_environment_force(entity, i)
 
             self._apply_vectorized_enviornment_force()
             for i, entity in enumerate(self.entities):
@@ -1708,14 +1710,14 @@ class World(TorchVectorizedObject):
                 if not self.collides(entity_a, entity_b):
                     continue
                 if isinstance(entity_a.shape, Sphere) and isinstance(
-                    entity_b.shape, Sphere
+                        entity_b.shape, Sphere
                 ):
                     s_s.append((entity_a, entity_b))
                 elif (
-                    isinstance(entity_a.shape, Line)
-                    and isinstance(entity_b.shape, Sphere)
-                    or isinstance(entity_b.shape, Line)
-                    and isinstance(entity_a.shape, Sphere)
+                        isinstance(entity_a.shape, Line)
+                        and isinstance(entity_b.shape, Sphere)
+                        or isinstance(entity_b.shape, Line)
+                        and isinstance(entity_a.shape, Sphere)
                 ):
                     line, sphere = (
                         (entity_a, entity_b)
@@ -1724,14 +1726,14 @@ class World(TorchVectorizedObject):
                     )
                     l_s.append((line, sphere))
                 elif isinstance(entity_a.shape, Line) and isinstance(
-                    entity_b.shape, Line
+                        entity_b.shape, Line
                 ):
                     l_l.append((entity_a, entity_b))
                 elif (
-                    isinstance(entity_a.shape, Box)
-                    and isinstance(entity_b.shape, Sphere)
-                    or isinstance(entity_b.shape, Box)
-                    and isinstance(entity_a.shape, Sphere)
+                        isinstance(entity_a.shape, Box)
+                        and isinstance(entity_b.shape, Sphere)
+                        or isinstance(entity_b.shape, Box)
+                        and isinstance(entity_a.shape, Sphere)
                 ):
                     box, sphere = (
                         (entity_a, entity_b)
@@ -1740,10 +1742,10 @@ class World(TorchVectorizedObject):
                     )
                     b_s.append((box, sphere))
                 elif (
-                    isinstance(entity_a.shape, Box)
-                    and isinstance(entity_b.shape, Line)
-                    or isinstance(entity_b.shape, Box)
-                    and isinstance(entity_a.shape, Line)
+                        isinstance(entity_a.shape, Box)
+                        and isinstance(entity_b.shape, Line)
+                        or isinstance(entity_b.shape, Box)
+                        and isinstance(entity_a.shape, Line)
                 ):
                     box, line = (
                         (entity_a, entity_b)
@@ -1752,7 +1754,7 @@ class World(TorchVectorizedObject):
                     )
                     b_l.append((box, line))
                 elif isinstance(entity_a.shape, Box) and isinstance(
-                    entity_b.shape, Box
+                        entity_b.shape, Box
                 ):
                     b_b.append((entity_a, entity_b))
                 else:
@@ -2353,8 +2355,8 @@ class World(TorchVectorizedObject):
         if not {a_shape.__class__, b_shape.__class__} in self._collidable_pairs:
             return False
         if not (
-            torch.linalg.vector_norm(a.state.pos - b.state.pos, dim=-1)
-            <= a.shape.circumscribed_radius() + b.shape.circumscribed_radius()
+                torch.linalg.vector_norm(a.state.pos - b.state.pos, dim=-1)
+                <= a.shape.circumscribed_radius() + b.shape.circumscribed_radius()
         ).any():
             return False
 
