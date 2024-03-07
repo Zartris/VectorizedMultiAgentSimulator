@@ -111,7 +111,7 @@ class Environment(TorchVectorizedObject):
 
     def unpacked_index(self, index):
         if isinstance(index, int):
-            return index
+            return [index]
         elif isinstance(index, list):
             return index
         elif isinstance(index, Tensor):
