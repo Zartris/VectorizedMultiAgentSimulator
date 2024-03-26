@@ -70,18 +70,18 @@ class TorchVectorizedObject(object):
             if isinstance(batch_index, list):
                 for b in batch_index:
                     assert (
-                            0 <= b < self.batch_dim
+                        0 <= b < self.batch_dim
                     ), f"Index must be between 0 and {self.batch_dim}, got {b}"
             elif isinstance(batch_index, Tensor):
                 assert (
-                        batch_index.max() < self.batch_dim
+                    batch_index.max() < self.batch_dim
                 ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
                 assert (
-                        batch_index.min() >= 0
+                    batch_index.min() >= 0
                 ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
             else:
                 assert (
-                        0 <= batch_index < self.batch_dim
+                    0 <= batch_index < self.batch_dim
                 ), f"Index must be between 0 and {self.batch_dim}, got {batch_index}"
 
     def to(self, device: torch.device):
@@ -130,7 +130,7 @@ class Box(Shape):
         return anchor[X] * self.length / 2, anchor[Y] * self.width / 2
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 12) * mass * (self.length ** 2 + self.width ** 2)
+        return (1 / 12) * mass * (self.length**2 + self.width**2)
 
     def circumscribed_radius(self):
         return math.sqrt((self.length / 2) ** 2 + (self.width / 2) ** 2)
@@ -167,7 +167,7 @@ class Sphere(Shape):
         return tuple(delta.tolist())
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 2) * mass * self.radius ** 2
+        return (1 / 2) * mass * self.radius**2
 
     def circumscribed_radius(self):
         return self.radius
@@ -194,7 +194,7 @@ class Line(Shape):
         return self._width
 
     def moment_of_inertia(self, mass: float):
-        return (1 / 12) * mass * (self.length ** 2)
+        return (1 / 12) * mass * (self.length**2)
 
     def circumscribed_radius(self):
         return self.length / 2
@@ -231,14 +231,14 @@ class EntityState(TorchVectorizedObject):
     @pos.setter
     def pos(self, pos: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                pos.shape[0] == self._batch_dim
+            pos.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {pos.shape[0]}, expected {self._batch_dim}"
         if self._vel is not None:
             assert (
-                    pos.shape == self._vel.shape
+                pos.shape == self._vel.shape
             ), f"Position shape must match velocity shape, got {pos.shape} expected {self._vel.shape}"
 
         self._pos = pos.to(self._device)
@@ -250,14 +250,14 @@ class EntityState(TorchVectorizedObject):
     @vel.setter
     def vel(self, vel: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                vel.shape[0] == self._batch_dim
+            vel.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {vel.shape[0]}, expected {self._batch_dim}"
         if self._pos is not None:
             assert (
-                    vel.shape == self._pos.shape
+                vel.shape == self._pos.shape
             ), f"Velocity shape must match position shape, got {vel.shape} expected {self._pos.shape}"
 
         self._vel = vel.to(self._device)
@@ -269,10 +269,10 @@ class EntityState(TorchVectorizedObject):
     @ang_vel.setter
     def ang_vel(self, ang_vel: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                ang_vel.shape[0] == self._batch_dim
+            ang_vel.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {ang_vel.shape[0]}, expected {self._batch_dim}"
 
         self._ang_vel = ang_vel.to(self._device)
@@ -284,10 +284,10 @@ class EntityState(TorchVectorizedObject):
     @rot.setter
     def rot(self, rot: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                rot.shape[0] == self._batch_dim
+            rot.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {rot.shape[0]}, expected {self._batch_dim}"
         # Normalize angle between -pi and pi
         rot = torch.fmod(rot + torch.pi, 2 * torch.pi) - torch.pi
@@ -318,7 +318,7 @@ class EntityState(TorchVectorizedObject):
 
 class AgentState(EntityState):
     def __init__(
-            self,
+        self,
     ):
         super().__init__()
         # communication utterance
@@ -331,10 +331,10 @@ class AgentState(EntityState):
     @c.setter
     def c(self, c: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an entity to the world before setting its state"
         assert (
-                c.shape[0] == self._batch_dim
+            c.shape[0] == self._batch_dim
         ), f"Internal state must match batch dim, got {c.shape[0]}, expected {self._batch_dim}"
 
         self._c = c.to(self._device)
@@ -361,13 +361,13 @@ class AgentState(EntityState):
 # action of an agent
 class Action(TorchVectorizedObject):
     def __init__(
-            self,
-            u_range: float,
-            u_multiplier: float,
-            u_noise: float,
-            u_rot_range: float,
-            u_rot_multiplier: float,
-            u_rot_noise: float,
+        self,
+        u_range: float,
+        u_multiplier: float,
+        u_noise: float,
+        u_rot_range: float,
+        u_rot_multiplier: float,
+        u_rot_noise: float,
     ):
         super().__init__()
         # physical motor noise amount
@@ -398,10 +398,10 @@ class Action(TorchVectorizedObject):
     @u.setter
     def u(self, u: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an agent to the world before setting its action"
         assert (
-                u.shape[0] == self._batch_dim
+            u.shape[0] == self._batch_dim
         ), f"Action must match batch dim, got {u.shape[0]}, expected {self._batch_dim}"
 
         self._u = u.to(self._device)
@@ -413,10 +413,10 @@ class Action(TorchVectorizedObject):
     @u_rot.setter
     def u_rot(self, u_rot: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an agent to the world before setting its action"
         assert (
-                u_rot.shape[0] == self._batch_dim
+            u_rot.shape[0] == self._batch_dim
         ), f"Action must match batch dim, got {u_rot.shape[0]}, expected {self._batch_dim}"
 
         self._u_rot = u_rot.to(self._device)
@@ -428,10 +428,10 @@ class Action(TorchVectorizedObject):
     @c.setter
     def c(self, c: Tensor):
         assert (
-                self._batch_dim is not None and self._device is not None
+            self._batch_dim is not None and self._device is not None
         ), "First add an agent to the world before setting its action"
         assert (
-                c.shape[0] == self._batch_dim
+            c.shape[0] == self._batch_dim
         ), f"Action must match batch dim, got {c.shape[0]}, expected {self._batch_dim}"
 
         self._c = c.to(self._device)
@@ -472,23 +472,23 @@ class Action(TorchVectorizedObject):
 # properties and state of physical world entity
 class Entity(TorchVectorizedObject, Observable, ABC):
     def __init__(
-            self,
-            name: str,
-            movable: bool = False,
-            rotatable: bool = False,
-            collide: bool = True,
-            density: float = 25.0,  # Unused for now
-            mass: float = 1.0,
-            shape: Shape = Sphere(),
-            v_range: float = None,
-            max_speed: float = None,
-            color=Color.GRAY,
-            is_joint: bool = False,
-            drag: float = None,
-            linear_friction: float = None,
-            angular_friction: float = None,
-            gravity: typing.Union[float, Tensor] = None,
-            collision_filter: Callable[[Entity], bool] = lambda _: True,
+        self,
+        name: str,
+        movable: bool = False,
+        rotatable: bool = False,
+        collide: bool = True,
+        density: float = 25.0,  # Unused for now
+        mass: float = 1.0,
+        shape: Shape = Sphere(),
+        v_range: float = None,
+        max_speed: float = None,
+        color=Color.GRAY,
+        is_joint: bool = False,
+        drag: float = None,
+        linear_friction: float = None,
+        angular_friction: float = None,
+        gravity: typing.Union[float, Tensor] = None,
+        collision_filter: Callable[[Entity], bool] = lambda _: True,
     ):
         TorchVectorizedObject.__init__(self)
         Observable.__init__(self)
@@ -517,6 +517,8 @@ class Entity(TorchVectorizedObject, Observable, ABC):
         self._collision_filter = collision_filter
         # state
         self._state = EntityState()
+        # previous state
+        self._prev_state = EntityState()
         # drag
         self._drag = drag
         # friction
@@ -540,6 +542,7 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     def batch_dim(self, batch_dim: int):
         TorchVectorizedObject.batch_dim.fset(self, batch_dim)
         self._state.batch_dim = batch_dim
+        self._prev_state.batch_dim = batch_dim
 
     @property
     def is_rendering(self):
@@ -574,6 +577,10 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     @property
     def state(self):
         return self._state
+
+    @property
+    def prev_state(self):
+        return self._prev_state
 
     @property
     def movable(self):
@@ -655,27 +662,61 @@ class Entity(TorchVectorizedObject, Observable, ABC):
 
     def _spawn(self, dim_c: int, dim_p: int):
         self.state._spawn(dim_c, dim_p)
+        self.prev_state._spawn(dim_c, dim_p)
 
     def _reset(self, env_index: int):
         self.state._reset(env_index)
+        self._prev_state._reset(env_index)
 
     def set_pos(self, pos: Tensor, batch_index: Union[int, list, Tensor]):
+        if batch_index is None:
+            old_value = self.state.pos
+        else:
+            old_value = self.state.pos[batch_index]
         self._set_state_property(EntityState.pos, self.state, pos, batch_index)
+        self._set_state_property(
+            EntityState.pos, self.prev_state, old_value, batch_index
+        )
 
     def set_vel(self, vel: Tensor, batch_index: Union[int, list, Tensor]):
+        if batch_index is None:
+            old_value = self.state.vel
+        else:
+            old_value = self.state.vel[batch_index]
         self._set_state_property(EntityState.vel, self.state, vel, batch_index)
+        self._set_state_property(
+            EntityState.vel, self.prev_state, old_value, batch_index
+        )
 
     def set_rot(self, rot: Tensor, batch_index: Union[int, list, Tensor]):
+        if batch_index is None:
+            old_value = self.state.rot
+        else:
+            old_value = self.state.rot[batch_index]
         self._set_state_property(EntityState.rot, self.state, rot, batch_index)
+        self._set_state_property(
+            EntityState.rot, self.prev_state, old_value, batch_index
+        )
 
     def set_ang_vel(self, ang_vel: Tensor, batch_index: Union[int, list, Tensor]):
+        if batch_index is None:
+            old_value = self.state.ang_vel
+        else:
+            old_value = self.state.ang_vel[batch_index]
         self._set_state_property(EntityState.ang_vel, self.state, ang_vel, batch_index)
+        self._set_state_property(
+            EntityState.ang_vel, self.prev_state, old_value, batch_index
+        )
 
     def _set_state_property(
-            self, prop, entity: EntityState, new: Tensor, batch_index: Union[int, list, Tensor]
+        self,
+        prop,
+        entity: EntityState,
+        new: Tensor,
+        batch_index: Union[int, list, Tensor],
     ):
         assert (
-                self.batch_dim is not None
+            self.batch_dim is not None
         ), f"Tried to set property of {self.name} without adding it to the world"
         self._check_batch_index(batch_index)
         if batch_index is None:
@@ -693,6 +734,7 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     def to(self, device: torch.device):
         super().to(device)
         self.state.to(device)
+        self.prev_state.to(device)
 
     def render(self, env_index: int = 0) -> "List[Geom]":
         from vmas.simulator import rendering
@@ -717,23 +759,23 @@ class Entity(TorchVectorizedObject, Observable, ABC):
 # properties of landmark entities
 class Landmark(Entity):
     def __init__(
-            self,
-            name: str,
-            shape: Shape = Sphere(),
-            movable: bool = False,
-            rotatable: bool = False,
-            collide: bool = True,
-            density: float = 25.0,  # Unused for now
-            mass: float = 1.0,
-            v_range: float = None,
-            max_speed: float = None,
-            color=Color.GRAY,
-            is_joint: bool = False,
-            drag: float = None,
-            linear_friction: float = None,
-            angular_friction: float = None,
-            gravity: float = None,
-            collision_filter: Callable[[Entity], bool] = lambda _: True,
+        self,
+        name: str,
+        shape: Shape = Sphere(),
+        movable: bool = False,
+        rotatable: bool = False,
+        collide: bool = True,
+        density: float = 25.0,  # Unused for now
+        mass: float = 1.0,
+        v_range: float = None,
+        max_speed: float = None,
+        color=Color.GRAY,
+        is_joint: bool = False,
+        drag: float = None,
+        linear_friction: float = None,
+        angular_friction: float = None,
+        gravity: float = None,
+        collision_filter: Callable[[Entity], bool] = lambda _: True,
     ):
         super().__init__(
             name,
@@ -758,42 +800,42 @@ class Landmark(Entity):
 # properties of agent entities
 class Agent(Entity):
     def __init__(
-            self,
-            name: str,
-            shape: Shape = Sphere(),
-            movable: bool = True,
-            rotatable: bool = True,
-            collide: bool = True,
-            density: float = 25.0,  # Unused for now
-            mass: float = 1.0,
-            f_range: float = None,
-            max_f: float = None,
-            t_range: float = None,
-            max_t: float = None,
-            v_range: float = None,
-            max_speed: float = None,
-            color=Color.BLUE,
-            alpha: float = 0.5,
-            obs_range: float = None,
-            obs_noise: float = None,
-            u_noise: float = None,
-            u_range: float = 1.0,
-            u_multiplier: float = 1.0,
-            u_rot_noise: float = None,
-            u_rot_range: float = 0.0,
-            u_rot_multiplier: float = 1.0,
-            action_script: Callable[[Agent, World], None] = None,
-            sensors: List[Sensor] = None,
-            c_noise: float = None,
-            silent: bool = True,
-            adversary: bool = False,
-            drag: float = None,
-            linear_friction: float = None,
-            angular_friction: float = None,
-            gravity: float = None,
-            collision_filter: Callable[[Entity], bool] = lambda _: True,
-            render_action: bool = False,
-            render_action_scale: float = 10.0,
+        self,
+        name: str,
+        shape: Shape = Sphere(),
+        movable: bool = True,
+        rotatable: bool = True,
+        collide: bool = True,
+        density: float = 25.0,  # Unused for now
+        mass: float = 1.0,
+        f_range: float = None,
+        max_f: float = None,
+        t_range: float = None,
+        max_t: float = None,
+        v_range: float = None,
+        max_speed: float = None,
+        color=Color.BLUE,
+        alpha: float = 0.5,
+        obs_range: float = None,
+        obs_noise: float = None,
+        u_noise: float = None,
+        u_range: float = 1.0,
+        u_multiplier: float = 1.0,
+        u_rot_noise: float = None,
+        u_rot_range: float = 0.0,
+        u_rot_multiplier: float = 1.0,
+        action_script: Callable[[Agent, World], None] = None,
+        sensors: List[Sensor] = None,
+        c_noise: float = None,
+        silent: bool = True,
+        adversary: bool = False,
+        drag: float = None,
+        linear_friction: float = None,
+        angular_friction: float = None,
+        gravity: float = None,
+        collision_filter: Callable[[Entity], bool] = lambda _: True,
+        render_action: bool = False,
+        render_action_scale: float = 10.0,
     ):
         super().__init__(
             name,
@@ -856,6 +898,7 @@ class Agent(Entity):
         )
         # state
         self._state = AgentState()
+        self._prev_state = AgentState()
 
     def add_sensor(self, sensor: Sensor):
         sensor.agent = self
@@ -874,27 +917,27 @@ class Agent(Entity):
         self._action_script(self, world)
         if self._silent or world.dim_c == 0:
             assert (
-                    self._action.c is None
+                self._action.c is None
             ), f"Agent {self.name} should not communicate but action script communicates"
         assert (
-                self._action.u is not None
+            self._action.u is not None
         ), f"Action script of {self.name} should set u action"
         assert (
-                self._action.u.shape[1] == world.dim_p
+            self._action.u.shape[1] == world.dim_p
         ), f"Scripted physical action of agent {self.name} has wrong shape"
         assert (
-                (self._action.u / self.u_multiplier).abs() <= self.u_range
+            (self._action.u / self.u_multiplier).abs() <= self.u_range
         ).all(), f"Scripted physical action of {self.name} is out of range"
         if self.u_rot_range != 0:
             assert (
-                    self._action.u_rot is not None
+                self._action.u_rot is not None
             ), f"Action script of {self.name} should set u_rot action"
             assert (
-                    self._action.u_rot.shape[1] == 1
+                self._action.u_rot.shape[1] == 1
             ), f"Scripted physical rotation action of agent {self.name} has wrong shape"
             assert (
-                    (self._action.u_rot / self._action.u_rot_multiplier).abs()
-                    <= self.u_rot_range
+                (self._action.u_rot / self._action.u_rot_multiplier).abs()
+                <= self.u_rot_range
             ).all(), f"Scripted physical rotation action of {self.name} is out of range"
 
     @property
@@ -1000,7 +1043,9 @@ class Agent(Entity):
             velocity = rendering.Line(
                 self.state.pos[env_index],
                 self.state.pos[env_index]
-                + self.action.u[env_index] * self._render_action_scale * self.shape.circumscribed_radius(),
+                + self.action.u[env_index]
+                * self._render_action_scale
+                * self.shape.circumscribed_radius(),
                 width=2,
             )
             velocity.set_color(*self.color)
@@ -1012,21 +1057,21 @@ class Agent(Entity):
 # Multi-agent world
 class World(TorchVectorizedObject):
     def __init__(
-            self,
-            batch_dim: int,
-            device: torch.device,
-            dt: float = 0.1,
-            substeps: int = 1,  # if you use joints, higher this value to gain simulation stability
-            drag: float = DRAG,
-            linear_friction: float = LINEAR_FRICTION,
-            angular_friction: float = ANGULAR_FRICTION,
-            x_semidim: float = None,
-            y_semidim: float = None,
-            dim_c: int = 0,
-            collision_force: float = COLLISION_FORCE,
-            joint_force: float = JOINT_FORCE,
-            contact_margin: float = 1e-3,
-            gravity: Tuple[float, float] = (0.0, 0.0),
+        self,
+        batch_dim: int,
+        device: torch.device,
+        dt: float = 0.1,
+        substeps: int = 1,  # if you use joints, higher this value to gain simulation stability
+        drag: float = DRAG,
+        linear_friction: float = LINEAR_FRICTION,
+        angular_friction: float = ANGULAR_FRICTION,
+        x_semidim: float = None,
+        y_semidim: float = None,
+        dim_c: int = 0,
+        collision_force: float = COLLISION_FORCE,
+        joint_force: float = JOINT_FORCE,
+        contact_margin: float = 1e-3,
+        gravity: Tuple[float, float] = (0.0, 0.0),
     ):
         assert batch_dim > 0, f"Batch dim must be greater than 0, got {batch_dim}"
 
@@ -1173,11 +1218,11 @@ class World(TorchVectorizedObject):
         return [agent for agent in self._agents if agent.action_script is not None]
 
     def _cast_ray_to_box(
-            self,
-            box: Entity,
-            ray_origin: Tensor,
-            ray_direction: Tensor,
-            max_range: float,
+        self,
+        box: Entity,
+        ray_origin: Tensor,
+        ray_direction: Tensor,
+        max_range: float,
     ):
         """
         Inspired from https://tavianator.com/2011/ray_box.html
@@ -1211,7 +1256,7 @@ class World(TorchVectorizedObject):
 
         intersect_aabb = tmin.unsqueeze(1) * ray_dir_aabb + pos_aabb
         intersect_world = (
-                TorchUtils.rotate_vector(intersect_aabb, box.state.rot) + box.state.pos
+            TorchUtils.rotate_vector(intersect_aabb, box.state.rot) + box.state.pos
         )
 
         collision = (tmax >= tmin) & (tmin > 0.0)
@@ -1220,11 +1265,11 @@ class World(TorchVectorizedObject):
         return dist
 
     def _cast_ray_to_sphere(
-            self,
-            sphere: Entity,
-            ray_origin: Tensor,
-            ray_direction: Tensor,
-            max_range: float,
+        self,
+        sphere: Entity,
+        ray_origin: Tensor,
+        ray_direction: Tensor,
+        max_range: float,
     ):
         ray_dir_world = torch.stack(
             [torch.cos(ray_direction), torch.sin(ray_direction)], dim=-1
@@ -1245,7 +1290,7 @@ class World(TorchVectorizedObject):
         d = test_point_pos - closest_point
         d_norm = torch.linalg.vector_norm(d, dim=1)
         ray_intersects = d_norm < sphere.shape.radius
-        m = torch.sqrt(sphere.shape.radius ** 2 - d_norm ** 2)
+        m = torch.sqrt(sphere.shape.radius**2 - d_norm**2)
 
         u = test_point_pos - ray_origin
         u1 = closest_point - ray_origin
@@ -1259,11 +1304,11 @@ class World(TorchVectorizedObject):
         return dist
 
     def _cast_ray_to_line(
-            self,
-            line: Entity,
-            ray_origin: Tensor,
-            ray_direction: Tensor,
-            max_range: float,
+        self,
+        line: Entity,
+        ray_origin: Tensor,
+        ray_direction: Tensor,
+        max_range: float,
     ):
         """
         Inspired by https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect/565282#565282
@@ -1276,14 +1321,14 @@ class World(TorchVectorizedObject):
 
         p = line.state.pos
         r = (
-                torch.stack(
-                    [
-                        torch.cos(line.state.rot.squeeze(1)),
-                        torch.sin(line.state.rot.squeeze(1)),
-                    ],
-                    dim=-1,
-                )
-                * line.shape.length
+            torch.stack(
+                [
+                    torch.cos(line.state.rot.squeeze(1)),
+                    torch.sin(line.state.rot.squeeze(1)),
+                ],
+                dim=-1,
+            )
+            * line.shape.length
         )
 
         q = ray_origin
@@ -1311,11 +1356,11 @@ class World(TorchVectorizedObject):
         return d
 
     def cast_ray(
-            self,
-            entity: Entity,
-            angles: Tensor,
-            max_range: float,
-            entity_filter: Callable[[Entity], bool] = lambda _: False,
+        self,
+        entity: Entity,
+        angles: Tensor,
+        max_range: float,
+        entity_filter: Callable[[Entity], bool] = lambda _: False,
     ):
         pos = entity.state.pos
 
@@ -1345,7 +1390,7 @@ class World(TorchVectorizedObject):
         return dist
 
     def get_distance_from_point(
-            self, entity: Entity, test_point_pos, env_index: int = None
+        self, entity: Entity, test_point_pos, env_index: int = None
     ):
         self._check_batch_index(env_index)
 
@@ -1383,10 +1428,10 @@ class World(TorchVectorizedObject):
             dist = self.get_distance_from_point(entity_a, entity_b.state.pos, env_index)
             return_value = dist - b_shape.radius
         elif (
-                isinstance(entity_a.shape, Box)
-                and isinstance(entity_b.shape, Sphere)
-                or isinstance(entity_b.shape, Box)
-                and isinstance(entity_a.shape, Sphere)
+            isinstance(entity_a.shape, Box)
+            and isinstance(entity_b.shape, Sphere)
+            or isinstance(entity_b.shape, Box)
+            and isinstance(entity_a.shape, Sphere)
         ):
             box, sphere = (
                 (entity_a, entity_b)
@@ -1398,10 +1443,10 @@ class World(TorchVectorizedObject):
             is_overlapping = self.is_overlapping(entity_a, entity_b)
             return_value[is_overlapping] = -1
         elif (
-                isinstance(entity_a.shape, Line)
-                and isinstance(entity_b.shape, Sphere)
-                or isinstance(entity_b.shape, Line)
-                and isinstance(entity_a.shape, Sphere)
+            isinstance(entity_a.shape, Line)
+            and isinstance(entity_b.shape, Sphere)
+            or isinstance(entity_b.shape, Line)
+            and isinstance(entity_a.shape, Sphere)
         ):
             line, sphere = (
                 (entity_a, entity_b)
@@ -1422,10 +1467,10 @@ class World(TorchVectorizedObject):
             dist = torch.linalg.vector_norm(point_a - point_b, dim=1)
             return_value = dist - LINE_MIN_DIST
         elif (
-                isinstance(entity_a.shape, Box)
-                and isinstance(entity_b.shape, Line)
-                or isinstance(entity_b.shape, Box)
-                and isinstance(entity_a.shape, Line)
+            isinstance(entity_a.shape, Box)
+            and isinstance(entity_b.shape, Line)
+            or isinstance(entity_b.shape, Box)
+            and isinstance(entity_a.shape, Line)
         ):
             box, line = (
                 (entity_a, entity_b)
@@ -1467,30 +1512,28 @@ class World(TorchVectorizedObject):
 
         # Sphere sphere, sphere line, line line, line box, box box
         if (
-                (isinstance(a_shape, Sphere) and isinstance(b_shape, Sphere))
-                or (
-                (
-                        isinstance(entity_a.shape, Line)
-                        and isinstance(entity_b.shape, Sphere)
-                        or isinstance(entity_b.shape, Line)
-                        and isinstance(entity_a.shape, Sphere)
-                )
-        )
-                or (isinstance(entity_a.shape, Line) and isinstance(entity_b.shape, Line))
-                or (
+            (isinstance(a_shape, Sphere) and isinstance(b_shape, Sphere))
+            or (
+                isinstance(entity_a.shape, Line)
+                and isinstance(entity_b.shape, Sphere)
+                or isinstance(entity_b.shape, Line)
+                and isinstance(entity_a.shape, Sphere)
+            )
+            or (isinstance(entity_a.shape, Line) and isinstance(entity_b.shape, Line))
+            or (
                 isinstance(entity_a.shape, Box)
                 and isinstance(entity_b.shape, Line)
                 or isinstance(entity_b.shape, Box)
                 and isinstance(entity_a.shape, Line)
-        )
-                or (isinstance(entity_a.shape, Box) and isinstance(entity_b.shape, Box))
+            )
+            or (isinstance(entity_a.shape, Box) and isinstance(entity_b.shape, Box))
         ):
             return self.get_distance(entity_a, entity_b, env_index) < 0
         elif (
-                isinstance(entity_a.shape, Box)
-                and isinstance(entity_b.shape, Sphere)
-                or isinstance(entity_b.shape, Box)
-                and isinstance(entity_a.shape, Sphere)
+            isinstance(entity_a.shape, Box)
+            and isinstance(entity_b.shape, Sphere)
+            or isinstance(entity_b.shape, Box)
+            and isinstance(entity_a.shape, Sphere)
         ):
             box, sphere = (
                 (entity_a, entity_b)
@@ -1516,7 +1559,7 @@ class World(TorchVectorizedObject):
             )
             dist_min = sphere.shape.radius + LINE_MIN_DIST
             return_value = (distance_sphere_box < distance_closest_point_box) + (
-                    distance_sphere_closest_point < dist_min
+                distance_sphere_closest_point < dist_min
             )
         else:
             assert False, "Overlap not computable for give entities"
@@ -1553,7 +1596,11 @@ class World(TorchVectorizedObject):
 
             for i, entity in enumerate(self.entities):
                 # apply agent force controls
-                if True and hasattr(entity, "dynamics") and hasattr(entity.dynamics, "apply_action_force"):
+                if (
+                    True
+                    and hasattr(entity, "dynamics")
+                    and hasattr(entity.dynamics, "apply_action_force")
+                ):
                     entity.dynamics.apply_action_force(self.force, i, substep)
                 else:
                     self._apply_action_force(entity, i)
@@ -1570,9 +1617,21 @@ class World(TorchVectorizedObject):
             self._apply_vectorized_enviornment_force()
             for i, entity in enumerate(self.entities):
                 # integrate physical state
-                if True and hasattr(entity, "dynamics") and hasattr(entity.dynamics, "integrate_state"):
-                    entity.dynamics.integrate_state(self.force, self.torque, i, substep, self._sub_dt, self._drag,
-                                                    self._x_semidim, self._y_semidim)
+                if (
+                    True
+                    and hasattr(entity, "dynamics")
+                    and hasattr(entity.dynamics, "integrate_state")
+                ):
+                    entity.dynamics.integrate_state(
+                        self.force,
+                        self.torque,
+                        i,
+                        substep,
+                        self._sub_dt,
+                        self._drag,
+                        self._x_semidim,
+                        self._y_semidim,
+                    )
                 else:
                     self._integrate_state(entity, i, substep)
 
@@ -1710,14 +1769,14 @@ class World(TorchVectorizedObject):
                 if not self.collides(entity_a, entity_b):
                     continue
                 if isinstance(entity_a.shape, Sphere) and isinstance(
-                        entity_b.shape, Sphere
+                    entity_b.shape, Sphere
                 ):
                     s_s.append((entity_a, entity_b))
                 elif (
-                        isinstance(entity_a.shape, Line)
-                        and isinstance(entity_b.shape, Sphere)
-                        or isinstance(entity_b.shape, Line)
-                        and isinstance(entity_a.shape, Sphere)
+                    isinstance(entity_a.shape, Line)
+                    and isinstance(entity_b.shape, Sphere)
+                    or isinstance(entity_b.shape, Line)
+                    and isinstance(entity_a.shape, Sphere)
                 ):
                     line, sphere = (
                         (entity_a, entity_b)
@@ -1726,14 +1785,14 @@ class World(TorchVectorizedObject):
                     )
                     l_s.append((line, sphere))
                 elif isinstance(entity_a.shape, Line) and isinstance(
-                        entity_b.shape, Line
+                    entity_b.shape, Line
                 ):
                     l_l.append((entity_a, entity_b))
                 elif (
-                        isinstance(entity_a.shape, Box)
-                        and isinstance(entity_b.shape, Sphere)
-                        or isinstance(entity_b.shape, Box)
-                        and isinstance(entity_a.shape, Sphere)
+                    isinstance(entity_a.shape, Box)
+                    and isinstance(entity_b.shape, Sphere)
+                    or isinstance(entity_b.shape, Box)
+                    and isinstance(entity_a.shape, Sphere)
                 ):
                     box, sphere = (
                         (entity_a, entity_b)
@@ -1742,10 +1801,10 @@ class World(TorchVectorizedObject):
                     )
                     b_s.append((box, sphere))
                 elif (
-                        isinstance(entity_a.shape, Box)
-                        and isinstance(entity_b.shape, Line)
-                        or isinstance(entity_b.shape, Box)
-                        and isinstance(entity_a.shape, Line)
+                    isinstance(entity_a.shape, Box)
+                    and isinstance(entity_b.shape, Line)
+                    or isinstance(entity_b.shape, Box)
+                    and isinstance(entity_a.shape, Line)
                 ):
                     box, line = (
                         (entity_a, entity_b)
@@ -1754,7 +1813,7 @@ class World(TorchVectorizedObject):
                     )
                     b_l.append((box, line))
                 elif isinstance(entity_a.shape, Box) and isinstance(
-                        entity_b.shape, Box
+                    entity_b.shape, Box
                 ):
                     b_b.append((entity_a, entity_b))
                 else:
@@ -2355,20 +2414,20 @@ class World(TorchVectorizedObject):
         if not {a_shape.__class__, b_shape.__class__} in self._collidable_pairs:
             return False
         if not (
-                torch.linalg.vector_norm(a.state.pos - b.state.pos, dim=-1)
-                <= a.shape.circumscribed_radius() + b.shape.circumscribed_radius()
+            torch.linalg.vector_norm(a.state.pos - b.state.pos, dim=-1)
+            <= a.shape.circumscribed_radius() + b.shape.circumscribed_radius()
         ).any():
             return False
 
         return True
 
     def _get_constraint_forces(
-            self,
-            pos_a: Tensor,
-            pos_b: Tensor,
-            dist_min,
-            force_multiplier: float,
-            attractive: bool = False,
+        self,
+        pos_a: Tensor,
+        pos_b: Tensor,
+        dist_min,
+        force_multiplier: float,
+        attractive: bool = False,
     ) -> Tensor:
         min_dist = 1e-6
         delta_pos = pos_a - pos_b
@@ -2378,18 +2437,18 @@ class World(TorchVectorizedObject):
         # softmax penetration
         k = self._contact_margin
         penetration = (
-                torch.logaddexp(
-                    torch.tensor(0.0, dtype=torch.float32, device=self.device),
-                    (dist_min - dist) * sign / k,
-                )
-                * k
+            torch.logaddexp(
+                torch.tensor(0.0, dtype=torch.float32, device=self.device),
+                (dist_min - dist) * sign / k,
+            )
+            * k
         )
         force = (
-                sign
-                * force_multiplier
-                * delta_pos
-                / dist.unsqueeze(-1)
-                * penetration.unsqueeze(-1)
+            sign
+            * force_multiplier
+            * delta_pos
+            / dist.unsqueeze(-1)
+            * penetration.unsqueeze(-1)
         )
         force = torch.where((dist < min_dist).unsqueeze(-1), 0.0, force)
         if not attractive:
@@ -2436,8 +2495,8 @@ class World(TorchVectorizedObject):
                 else:
                     entity.state.ang_vel = entity.state.ang_vel * (1 - self._drag)
             entity.state.ang_vel += (
-                                            self.torque[:, index] / entity.moment_of_inertia
-                                    ) * self._sub_dt
+                self.torque[:, index] / entity.moment_of_inertia
+            ) * self._sub_dt
             entity.state.rot += entity.state.ang_vel * self._sub_dt
 
     def _update_comm_state(self, agent):

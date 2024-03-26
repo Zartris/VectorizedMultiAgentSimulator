@@ -17,14 +17,14 @@ if typing.TYPE_CHECKING:
 
 class DiffDriveDynamics:
     def __init__(
-            self,
-            agent: vmas.simulator.core.Agent,
-            world: vmas.simulator.core.World,
-            integration: str = "rk4",  # one of "euler", "rk4"
+        self,
+        agent: vmas.simulator.core.Agent,
+        world: vmas.simulator.core.World,
+        integration: str = "rk4",  # one of "euler", "rk4"
     ):
         assert integration == "rk4" or integration == "euler"
         assert (
-                agent.action.u_rot_range != 0
+            agent.action.u_rot_range != 0
         ), "Agent with diff drive dynamics needs non zero u_rot_range"
 
         self.agent = agent
@@ -55,9 +55,14 @@ class DiffDriveDynamics:
 
         def f(rot):
             return torch.cat(
-                [sub_dt * (local_vel_x * torch.cos(rot) - local_vel_y * torch.sin(rot)),
-                 sub_dt * (local_vel_x * torch.sin(rot) + local_vel_y * torch.cos(rot)),
-                 sub_dt * current_ang_vel], dim=-1
+                [
+                    sub_dt
+                    * (local_vel_x * torch.cos(rot) - local_vel_y * torch.sin(rot)),
+                    sub_dt
+                    * (local_vel_x * torch.sin(rot) + local_vel_y * torch.cos(rot)),
+                    sub_dt * current_ang_vel,
+                ],
+                dim=-1,
             )
 
         current_heading = self.agent.state.rot
@@ -68,16 +73,26 @@ class DiffDriveDynamics:
 
         return self.agent.state.pos + (1 / 6) * (k1 + 2 * k2 + 2 * k3 + k4)[:, :2]
 
-    def integrate_state(self, force: Tensor, torque: Tensor, agent_index: int, substep_index: int, sub_dt: float,
-                        world_drag: float,
-                        x_semidim: float, y_semidim: float):
+    def integrate_state(
+        self,
+        force: Tensor,
+        torque: Tensor,
+        agent_index: int,
+        substep_index: int,
+        sub_dt: float,
+        world_drag: float,
+        x_semidim: float,
+        y_semidim: float,
+    ):
         if self.agent.movable:
             # Compute translation
             if substep_index == 0:
                 if self.agent.drag is not None:
-                    self.agent.state.vel = self.agent.state.vel * (1 - self.agent.drag)
+                    self.agent.set_vel(
+                        self.agent.state.vel * (1 - self.agent.drag), None
+                    )
                 else:
-                    self.agent.state.vel = self.agent.state.vel * (1 - world_drag)
+                    self.agent.set_vel(self.agent.state.vel * (1 - world_drag), None)
             # TODO:: Might need a more precise method for velocity transfer
             # correct velocity to be in the direction of the agent
             local_vel = self.global_to_local(self.agent.state.vel)
@@ -93,43 +108,46 @@ class DiffDriveDynamics:
             self.local_to_global(local_vel, out=self.agent.state.vel)
 
             if self.agent.max_speed is not None:
-                local_vel = TorchUtils.clamp_with_norm(
-                    local_vel, self.agent.max_speed
-                )
+                local_vel = TorchUtils.clamp_with_norm(local_vel, self.agent.max_speed)
 
             if self.agent.v_range is not None:
                 # before = local_vel.clone()
-                local_vel = local_vel.clamp(
-                    -self.agent.v_range, self.agent.v_range
-                )
+                local_vel = local_vel.clamp(-self.agent.v_range, self.agent.v_range)
                 # if not before.equal(local_vel):
                 #     debug = 0
             self.local_to_global(local_vel, out=self.agent.state.vel)
 
             # Use runge kutta to compute the position:
-            new_pos = self.runge_kutta_position(local_vel, self.agent.state.ang_vel.squeeze(-1), sub_dt)
+            new_pos = self.runge_kutta_position(
+                local_vel, self.agent.state.ang_vel.squeeze(-1), sub_dt
+            )
             # new_pos_t = self.agent.state.pos + self.agent.state.vel * sub_dt
             if x_semidim is not None:
-                new_pos[:, X] = torch.clamp(
-                    new_pos[:, X], -x_semidim, x_semidim
-                )
+                new_pos[:, X] = torch.clamp(new_pos[:, X], -x_semidim, x_semidim)
             if y_semidim is not None:
-                new_pos[:, Y] = torch.clamp(
-                    new_pos[:, Y], -y_semidim, y_semidim
-                )
-            self.agent.state.pos = new_pos
+                new_pos[:, Y] = torch.clamp(new_pos[:, Y], -y_semidim, y_semidim)
+            self.agent.set_pos(new_pos, None)
 
         if self.agent.rotatable:
             # Compute rotation
             if substep_index == 0:
                 if self.agent.drag is not None:
-                    self.agent.state.ang_vel = self.agent.state.ang_vel * (1 - self.agent.drag)
+                    self.agent.set_ang_vel(
+                        self.agent.state.ang_vel * (1 - self.agent.drag), None
+                    )
                 else:
-                    self.agent.state.ang_vel = self.agent.state.ang_vel * (1 - world_drag)
-            self.agent.state.ang_vel += (
-                                                torque[:, agent_index] / self.agent.moment_of_inertia
-                                        ) * sub_dt
-            self.agent.state.rot += self.agent.state.ang_vel * sub_dt
+                    self.agent.set_ang_vel(
+                        self.agent.state.ang_vel * (1 - world_drag), None
+                    )
+
+            self.agent.set_ang_vel(
+                self.agent.state.ang_vel
+                + (torque[:, agent_index] / self.agent.moment_of_inertia) * sub_dt,
+                None,
+            )
+            self.agent.set_rot(
+                self.agent.state.rot + self.agent.state.ang_vel * sub_dt, None
+            )
 
     def apply_action_force(self, force: Tensor, index: int, substep: int):
         if self.agent.movable:
@@ -139,7 +157,9 @@ class DiffDriveDynamics:
 
             noise = (
                 torch.randn(
-                    *self.agent.action.u.shape, device=self.world.device, dtype=torch.float32
+                    *self.agent.action.u.shape,
+                    device=self.world.device,
+                    dtype=torch.float32,
                 )
                 * self.agent.u_noise
                 if self.agent.u_noise is not None
