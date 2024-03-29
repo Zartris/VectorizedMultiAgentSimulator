@@ -279,9 +279,9 @@ class Environment(TorchVectorizedObject):
                 for a_index in range(len(inner_obs)):
                     t_obs = inner_obs[a_index]
                     obs[a_index].append(t_obs)
+                    dones.append(inner_dones)
                 # obs.append(inner_obs)
 
-            dones = inner_dones
             infos.append(inner_infos)
             if self.render_inner_loop:
                 frame = self.render(
