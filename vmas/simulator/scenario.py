@@ -117,6 +117,12 @@ class BaseScenario(ABC):
         """
         raise NotImplementedError()
 
+    def pre_step(self):
+        pass
+
+    def post_step(self):
+        pass
+
     @abstractmethod
     def reset_world_at(self, env_index: typing.Union[int, list, Tensor] = None):
         """

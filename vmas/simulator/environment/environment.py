@@ -239,8 +239,8 @@ class Environment(TorchVectorizedObject):
         for i, agent in enumerate(self.world.agents):
             trajectory = self.scenario.env_process_action_input(agent, actions[i])
             trajectories.append(trajectory)
-            # reset history
-            agent.pos_history = torch.zeros_like(trajectory)
+            # # reset history
+            # agent.pos_history = torch.zeros_like(trajectory)
 
         # self.check_control_action_input(control_actions)
         trajectories = torch.stack(trajectories)
@@ -326,19 +326,16 @@ class Environment(TorchVectorizedObject):
             self.scenario.env_process_action(agent)
 
         # assert correct agent action size
+        self.scenario.pre_step()
         # advance world state
         self.world.step()
-
         self.steps += 1
+        self.scenario.post_step()
         # TODO:: We dont need to collect all the information all the time.
 
         obs, rewards, dones, infos = self.get_from_scenario(
             get_observations=get_obs, get_infos=True, get_rewards=True, get_dones=True
         )
-
-        for agent in self.world.agents:
-            agent.pos_history[:, inner_epoch, :] = agent.state.pos
-
         return obs, rewards, dones, infos
 
     def done(self):
