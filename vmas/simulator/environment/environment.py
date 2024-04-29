@@ -273,15 +273,16 @@ class Environment(TorchVectorizedObject):
                 trajectories, inner_epoch, get_obs=record_obs
             )
             # rewards += inner_rewards
-            for a_index in range(len(inner_rewards)):
-                rewards[a_index][rew_index] += inner_rewards[a_index]
+            # for a_index in range(len(inner_rewards)):
+            #     rewards[a_index][rew_index] += inner_rewards[a_index]
 
             if record_obs:
-                rew_index += 1
                 for a_index in range(len(inner_obs)):
                     t_obs = inner_obs[a_index]
                     obs[a_index].append(t_obs)
+                    rewards[a_index][rew_index] += inner_rewards[a_index]
                 dones.append(inner_dones)
+                rew_index += 1
                 # obs.append(inner_obs)
 
             infos.append(inner_infos)
@@ -321,6 +322,8 @@ class Environment(TorchVectorizedObject):
 
     @profile
     def _step_inner(self, trajectories, inner_epoch, get_obs=True):
+        if get_obs:
+            self.scenario.world.recompute_reward = True
         # set action for each agent
         for i, agent in enumerate(self.agents):
             control_actions = self.scenario.convert_to_control_actions(

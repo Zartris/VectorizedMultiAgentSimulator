@@ -1076,7 +1076,7 @@ class World(TorchVectorizedObject):
         assert batch_dim > 0, f"Batch dim must be greater than 0, got {batch_dim}"
 
         super().__init__(batch_dim, device)
-        self.first_reward_calculation = True
+        self.recompute_reward = True
         # list of agents and entities (can change at execution-time!)
         self._agents = []
         self._landmarks = []
@@ -1145,7 +1145,7 @@ class World(TorchVectorizedObject):
             )
 
     def reset(self, env_index: typing.Union[int, list, Tensor]):
-        self.first_reward_calculation = True
+        self.recompute_reward = True
         if isinstance(env_index, int):
             for e in self.entities:
                 e._reset(env_index)
@@ -1570,7 +1570,6 @@ class World(TorchVectorizedObject):
     # update state of the world
     @profile
     def step(self):
-        self.first_reward_calculation = True
         self.sim_time = self.sim_time + self._dt
         self.entity_index_map = {e: i for i, e in enumerate(self.entities)}
         # forces
