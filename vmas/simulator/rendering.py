@@ -17,6 +17,7 @@ import numpy as np
 import pyglet
 import six
 import torch
+
 from vmas.simulator.utils import x_to_rgb_colormap, TorchUtils
 
 try:
@@ -457,7 +458,7 @@ def render_function_util(
         precision: float = 0.01,
         cmap_range: Optional[Tuple[float, float]] = None,
         cmap_alpha: float = 1.0,
-    cmap_name: str = "viridis",
+        cmap_name: str = "viridis",
 ):
     if isinstance(plot_range, int) or isinstance(plot_range, float):
         x_min = -plot_range
@@ -548,5 +549,50 @@ def make_capsule(length, width):
     circ1.add_attr(Transform(translation=(length, 0)))
     geom = Compound([box, circ0, circ1])
     return geom
+
+
+# Function to extract the parameters from the covariance matrix
+def get_gaussian_parameters(cov_matrix):
+    if isinstance(cov_matrix, torch.Tensor):
+        cov_matrix = cov_matrix.cpu().detach().numpy()
+    # Eigen decomposition
+    eigenvalues, eigenvectors = np.linalg.eigh(cov_matrix)
+
+    # Eigenvalues are the squared lengths of the semi-axes
+    x_std, y_std = np.sqrt(eigenvalues) * 3  # to cover 99.7% of the distribution
+
+    # Angle of rotation
+    angle = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
+
+    return x_std, y_std, angle
+
+
+# Function to generate ellipse points based on Gaussian parameters with rotation
+def make_gaussian_ellipse(x_mean, y_mean, cov_matrix, num_points=100):
+    x_std, y_std, angle = get_gaussian_parameters(cov_matrix)
+
+    angles = np.linspace(0, 2 * np.pi, num_points)
+    ellipse_points = []
+
+    for theta in angles:
+        x = x_std * np.cos(theta)
+        y = y_std * np.sin(theta)
+
+        # Rotation matrix
+        x_rot = x * np.cos(np.radians(angle)) - y * np.sin(np.radians(angle))
+        y_rot = x * np.sin(np.radians(angle)) + y * np.cos(np.radians(angle))
+
+        ellipse_points.append((x_mean + x_rot, y_mean + y_rot))
+
+    return ellipse_points
+
+
+# Function to create the ellipse geometry
+def make_ellipse(x_mean, y_mean, cov_matrix, filled=True, draw_border=True, num_points=100):
+    points = make_gaussian_ellipse(x_mean, y_mean, cov_matrix, num_points)
+    if filled:
+        return FilledPolygon(points, draw_border=draw_border)
+    else:
+        return PolyLine(points, True)
 
 # ================================================================
