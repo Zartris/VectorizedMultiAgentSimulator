@@ -203,7 +203,7 @@ class Environment(TorchVectorizedObject):
                     infos.append(info)
 
         if get_dones:
-            dones = self.done()
+            dones = self.done() # (dones, terminated)
 
         result = [obs, rewards, dones, infos]
         # return [data for data in result if data is not None]
@@ -358,10 +358,12 @@ class Environment(TorchVectorizedObject):
         return obs, rewards, dones, infos
 
     def done(self):
-        dones = self.scenario.done().clone()
+        terminated = self.scenario.done().clone()
+        dones = terminated.clone()
         if self.max_steps is not None:
             dones += self.steps >= self.max_steps
-        return dones
+            dones = dones.clamp(max=1)
+        return dones, terminated
 
     def check_action_input(self, actions):
         if isinstance(actions, Dict):
