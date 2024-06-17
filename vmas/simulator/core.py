@@ -224,6 +224,15 @@ class EntityState(TorchVectorizedObject):
         # angular velocity
         self._ang_vel = None
 
+    def __str__(self) -> str:
+        rep_str = {
+            "pos:": self.pos,
+            "vel:": self.vel,
+            "rot:": self.rot,
+            "ang_vel:": self.ang_vel,
+        }
+        return str(rep_str)
+
     @property
     def pos(self):
         return self._pos
@@ -482,6 +491,7 @@ class Entity(TorchVectorizedObject, Observable, ABC):
         shape: Shape = Sphere(),
         v_range: float = None,
         max_speed: float = None,
+        min_speed: float = None,
         color=Color.GRAY,
         is_joint: bool = False,
         drag: float = None,
@@ -506,6 +516,7 @@ class Entity(TorchVectorizedObject, Observable, ABC):
         self._mass = mass
         # max speed
         self._max_speed = max_speed
+        self._min_speed = min_speed
         self._v_range = v_range
         # color
         self._color = color
@@ -597,6 +608,10 @@ class Entity(TorchVectorizedObject, Observable, ABC):
     @property
     def max_speed(self):
         return self._max_speed
+
+    @property
+    def min_speed(self):
+        return self._min_speed
 
     @property
     def v_range(self):
@@ -769,6 +784,7 @@ class Landmark(Entity):
         mass: float = 1.0,
         v_range: float = None,
         max_speed: float = None,
+        min_speed: float = None,
         color=Color.GRAY,
         is_joint: bool = False,
         drag: float = None,
@@ -787,6 +803,7 @@ class Landmark(Entity):
             shape,
             v_range,
             max_speed,
+            min_speed,
             color,
             is_joint,
             drag,
@@ -814,6 +831,7 @@ class Agent(Entity):
         max_t: float = None,
         v_range: float = None,
         max_speed: float = None,
+        min_speed: float = None,
         color=Color.BLUE,
         alpha: float = 0.5,
         obs_range: float = None,
@@ -847,6 +865,7 @@ class Agent(Entity):
             shape,
             v_range,
             max_speed,
+            min_speed,
             color,
             is_joint=False,
             drag=drag,
