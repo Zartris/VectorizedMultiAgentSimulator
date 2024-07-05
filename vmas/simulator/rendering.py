@@ -141,13 +141,14 @@ class Viewer(object):
     def add_onetime_list(self, geoms):
         self.onetime_geoms.extend(geoms)
 
-    def render(self, return_rgb_array=False):
+    def clear(self):
         glClearColor(1, 1, 1, 1)
-
         self.window.clear()
         self.window.switch_to()
         self.window.dispatch_events()
 
+    def render(self, return_rgb_array=False):
+        self.clear()
         self.transform.enable()
 
         text_lines = []
