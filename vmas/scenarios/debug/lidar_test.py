@@ -10,7 +10,7 @@ from vmas import render_interactively
 from vmas.simulator.core import Agent, Box, Landmark, Line, Sphere, World
 from vmas.simulator.dynamics.diff_drive import DiffDrive
 from vmas.simulator.scenario import BaseScenario
-from vmas.simulator.sensors import Lidar
+from vmas.simulator.sensors import LidarWithVel
 from vmas.simulator.utils import Color, ScenarioUtils
 
 if typing.TYPE_CHECKING:
@@ -48,12 +48,31 @@ class Scenario(BaseScenario):
             u_multiplier=[1, 1],
             dynamics=DiffDrive(world, integration="rk4"),
             sensors=[
-                Lidar(
+                LidarWithVel(
                     world=world,
                     n_rays=100,
                     max_range=0.5,
                     render_color=Color.GRAY,
                     alpha=0.25,
+                )
+            ],
+        )
+        world.add_agent(agent)
+        agent = Agent(
+            name="diff_drive",
+            collide=True,
+            render_action=True,
+            u_range=[1, 1],
+            u_multiplier=[1, 1],
+            dynamics=DiffDrive(world, integration="rk4"),
+            sensors=[
+                LidarWithVel(
+                    world=world,
+                    n_rays=100,
+                    max_range=0.5,
+                    render_color=Color.GRAY,
+                    alpha=0.25,
+                    render=False,
                 )
             ],
         )
@@ -129,4 +148,4 @@ class Scenario(BaseScenario):
 
 
 if __name__ == "__main__":
-    render_interactively(__file__, control_two_agents=False)
+    render_interactively(__file__, control_two_agents=True)

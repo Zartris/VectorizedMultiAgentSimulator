@@ -1599,6 +1599,53 @@ class World(TorchVectorizedObject):
         dist, _ = torch.min(torch.stack(dists, dim=-1), dim=-1)
         return dist
 
+    def cast_rays_dist_and_speed(
+        self,
+        entity: Entity,
+        angles: Tensor,
+        max_range: float,
+        entity_filter: Callable[[Entity], bool] = lambda _: False,
+    ):
+        pos = entity.state.pos
+
+        assert pos.ndim == 2 and angles.ndim == 2
+        assert pos.shape[0] == angles.shape[0]
+
+        # Initialize with full max_range to avoid dists being empty when all entities are filtered
+        dists = [torch.full_like(angles, fill_value=max_range, device=self.device)]
+        entity_vel = [torch.zeros((self.batch_dim, 2), device=self.device)]
+        for e in self.entities:
+            if entity is e or not entity_filter(e):
+                continue
+            assert e.collides(entity) and entity.collides(
+                e
+            ), "Rays are only casted among collidables"
+            if isinstance(e.shape, Box):
+                d = self._cast_rays_to_box(e, pos, angles, max_range)
+            elif isinstance(e.shape, Sphere):
+                d = self._cast_rays_to_sphere(e, pos, angles, max_range)
+            elif isinstance(e.shape, Line):
+                d = self._cast_rays_to_line(e, pos, angles, max_range)
+            else:
+                raise RuntimeError(f"Shape {e.shape} currently not handled by cast_ray")
+            dists.append(d)
+            if isinstance(e, Agent):
+                entity_vel.append(e.state.vel)
+            else:
+                entity_vel.append(torch.zeros((self.batch_dim, 2), device=self.device))
+        dist = torch.stack(dists, dim=-1)
+        entity_vel = torch.stack(entity_vel, dim=-2)
+        entity_vel = entity_vel.unsqueeze(1).repeat(
+            1, 100, 1, 1
+        )  # [world, rays, entities, 2]
+
+        dist_arg = torch.argmin(dist, dim=-1).unsqueeze(-1)  # [world, rays, 1]
+        dist = torch.gather(dist, -1, dist_arg).squeeze(-1)  # [world, rays]
+        entity_vel = torch.gather(
+            entity_vel, -2, dist_arg.unsqueeze(-1).repeat(1, 1, 1, 2)
+        ).squeeze(-2)
+        return dist, entity_vel
+
     def get_distance_from_point(
         self, entity: Entity, test_point_pos, env_index: int = None
     ):
