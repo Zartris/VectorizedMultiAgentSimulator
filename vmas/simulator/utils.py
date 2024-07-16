@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Dict, List, Sequence, Tuple, Union
 
 import numpy as np
+from sympy import E
 import torch
 from torch import Tensor
 
@@ -265,11 +266,12 @@ class ScenarioUtils:
         min_dist_between_entities: float,
         x_bounds: Tuple[int, int],
         y_bounds: Tuple[int, int],
+        max_tries=10_000,  # prevent ever-lasting loop if world is too tight
     ):
         batch_size = world.batch_dim if env_index is None else 1
 
         pos = None
-        while True:
+        while max_tries > 0:
             proposed_pos = torch.cat(
                 [
                     torch.empty(
@@ -296,6 +298,9 @@ class ScenarioUtils:
                 pos[overlaps] = proposed_pos[overlaps]
             else:
                 break
+            max_tries -= 1
+        if max_tries == 0:
+            raise Exception("Could not find a valid position for the entity.")
         return pos
 
     @staticmethod

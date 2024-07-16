@@ -1636,7 +1636,7 @@ class World(TorchVectorizedObject):
         dist = torch.stack(dists, dim=-1)
         entity_vel = torch.stack(entity_vel, dim=-2)
         entity_vel = entity_vel.unsqueeze(1).repeat(
-            1, 100, 1, 1
+            1, angles.shape[1], 1, 1
         )  # [world, rays, entities, 2]
 
         dist_arg = torch.argmin(dist, dim=-1).unsqueeze(-1)  # [world, rays, 1]
@@ -1774,12 +1774,10 @@ class World(TorchVectorizedObject):
         if (
             (isinstance(a_shape, Sphere) and isinstance(b_shape, Sphere))
             or (
-                (
-                    isinstance(entity_a.shape, Line)
-                    and isinstance(entity_b.shape, Sphere)
-                    or isinstance(entity_b.shape, Line)
-                    and isinstance(entity_a.shape, Sphere)
-                )
+                isinstance(entity_a.shape, Line)
+                and isinstance(entity_b.shape, Sphere)
+                or isinstance(entity_b.shape, Line)
+                and isinstance(entity_a.shape, Sphere)
             )
             or (isinstance(entity_a.shape, Line) and isinstance(entity_b.shape, Line))
             or (
@@ -2099,7 +2097,10 @@ class World(TorchVectorizedObject):
             )
             rotate = rotate_prior.unsqueeze(0).expand(self.batch_dim, -1).unsqueeze(-1)
 
-            (force_a_attractive, force_b_attractive,) = self._get_constraint_forces(
+            (
+                force_a_attractive,
+                force_b_attractive,
+            ) = self._get_constraint_forces(
                 pos_joint_a,
                 pos_joint_b,
                 dist_min=dist,

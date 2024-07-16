@@ -47,9 +47,7 @@ class Environment(TorchVectorizedObject):
         **kwargs,
     ):
         if multidiscrete_actions:
-            assert (
-                not continuous_actions
-            ), "When asking for multidiscrete_actions, make sure continuous_actions=False"
+            assert not continuous_actions, "When asking for multidiscrete_actions, make sure continuous_actions=False"
 
         self.scenario = scenario
         self.num_envs = num_envs
@@ -88,6 +86,7 @@ class Environment(TorchVectorizedObject):
         Resets the environment in a vectorized way
         Returns observations for all envs and agents
         """
+        print("Resetting environment")
         if seed is not None:
             self.seed(seed)
         # reset world
@@ -769,10 +768,13 @@ class Environment(TorchVectorizedObject):
         if plot_range is None:
             assert self.viewer.bounds is not None, "Set viewer bounds before plotting"
             x_min, x_max, y_min, y_max = self.viewer.bounds.tolist()
-            plot_range = [x_min - precision, x_max - precision], [
-                y_min - precision,
-                y_max + precision,
-            ]
+            plot_range = (
+                [x_min - precision, x_max - precision],
+                [
+                    y_min - precision,
+                    y_max + precision,
+                ],
+            )
 
         geom = render_function_util(
             f=f,
