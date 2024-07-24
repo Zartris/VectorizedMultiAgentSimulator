@@ -97,49 +97,27 @@ class Lidar(Sensor):
     def alpha(self):
         return self._alpha
 
-    def measure(self):
-        # dists = []
+    def measure(self, vectorized: bool = True):
+        if not vectorized:
+            dists = []
+            for angle in self._angles.unbind(1):
+                dists.append(
+                    self._world.cast_ray(
+                        self.agent,
+                        angle + self.agent.state.rot.squeeze(-1),
+                        max_range=self._max_range,
+                        entity_filter=self.entity_filter,
+                    )
+                )
+            measurement = torch.stack(dists, dim=1)
 
-        # start_time = time.perf_counter()
-        # for angle in self._angles.unbind(1):
-        #     dists.append(
-        #         self._world.cast_ray(
-        #             self.agent,
-        #             angle + self.agent.state.rot.squeeze(-1),
-        #             max_range=self._max_range,
-        #             entity_filter=self.entity_filter,
-        #         )
-        #     )
-        # measurement = torch.stack(dists, dim=1)
-        # print(f"LOOP TIME: {time.perf_counter() - start_time}")
-
-        a = self._angles
-        # start_time = time.perf_counter()
-        dist_test = self._world.cast_rays(
-            self.agent,
-            a + self.agent.state.rot,
-            max_range=self._max_range,
-            entity_filter=self.entity_filter,
-        )
-        # print(f"VEC TIME: {time.perf_counter() - start_time}")
-
-        # Define a tolerance for the comparison
-        # tolerance = 1e-5
-        # differences = torch.abs(dist_test - measurement)
-
-        # Find indices where differences exceed the tolerance
-        # significant_diffs = torch.nonzero(differences > tolerance)
-
-        # if significant_diffs.numel() > 0:
-        #     print("AssertionError triggered!")
-        #     for idx in significant_diffs:
-        #         i, j = idx.tolist()
-        #         print(f"Difference at index ({i}, {j}):")
-        #         print(f"  dist_test[{i}, {j}] = {dist_test[i, j]}")
-        #         print(f"  measurement[{i}, {j}] = {measurement[i, j]}")
-        #         print(f"  Difference = {differences[i, j]}")
-        #     raise AssertionError("not all vectors were close!")
-        measurement = dist_test
+        else:
+            measurement = self._world.cast_rays(
+                self.agent,
+                self._angles + self.agent.state.rot,
+                max_range=self._max_range,
+                entity_filter=self.entity_filter,
+            )
         self._last_measurement = measurement
         return measurement
 
@@ -180,101 +158,4 @@ class Lidar(Sensor):
 
                 geoms.append(ray)
                 geoms.append(ray_circ)
-        return geoms
-
-
-class LidarWithVel(Lidar):
-    def __init__(
-        self,
-        world: vmas.simulator.core.World,
-        angle_start: float = 0.0,
-        angle_end: float = 2 * torch.pi,
-        n_rays: int = 8,
-        max_range: float = 1.0,
-        entity_filter: Callable[[vmas.simulator.core.Entity], bool] = lambda _: True,
-        render_color: Union[Color, Tuple[float, float, float]] = Color.GRAY,
-        alpha: float = 1.0,
-        render: bool = True,
-        vel_render_scale: float = 0.2,
-    ):
-        super().__init__(
-            world,
-            angle_start,
-            angle_end,
-            n_rays,
-            max_range,
-            entity_filter,
-            render_color,
-            alpha,
-            render,
-        )
-        self._last_vel = None
-        self.vel_render_scale = vel_render_scale
-
-    def measure(self):
-        a = self._angles
-        dist, vel = self._world.cast_rays_dist_and_speed(
-            self.agent,
-            a + self.agent.state.rot,
-            max_range=self._max_range,
-            entity_filter=self.entity_filter,
-        )
-        measurement = dist
-        self._last_measurement = measurement
-        self._last_vel = vel
-        return measurement, vel
-
-    def set_render(self, render: bool):
-        self._render = render
-
-    def render(self, env_index: int = 0) -> "List[Geom]":
-        if not self._render:
-            return []
-        from vmas.simulator import rendering
-
-        geoms: List[rendering.Geom] = []
-        if self._last_measurement is not None:
-            for angle, dist, vel in zip(
-                self._angles.unbind(1),
-                self._last_measurement.unbind(1),
-                self._last_vel.unbind(1),
-            ):
-                angle = angle[env_index] + self.agent.state.rot.squeeze(-1)[env_index]
-                ray = rendering.Line(
-                    (0, 0),
-                    (dist[env_index], 0),
-                    width=0.05,
-                )
-                xform = rendering.Transform()
-                xform.set_translation(*self.agent.state.pos[env_index])
-                xform.set_rotation(angle)
-                ray.add_attr(xform)
-                ray.set_color(r=0, g=0, b=0, alpha=self.alpha)
-
-                ray_circ = rendering.make_circle(0.01)
-                ray_circ.set_color(*self.render_color, alpha=self.alpha)
-                xform = rendering.Transform()
-                rot = torch.stack([torch.cos(angle), torch.sin(angle)], dim=-1)
-                pos_circ = (
-                    self.agent.state.pos[env_index] + rot * dist.unsqueeze(1)[env_index]
-                )
-                xform.set_translation(*pos_circ)
-                ray_circ.add_attr(xform)
-
-                geoms.append(ray)
-                geoms.append(ray_circ)
-                vel_render = vel[env_index] * self.vel_render_scale
-                # Add velocity vectors
-                vel_arrow = rendering.Line(
-                    (0, 0),
-                    (vel_render[0], vel_render[1]),
-                    width=0.05,
-                )
-                xform = rendering.Transform()
-                xform.set_translation(*pos_circ)
-                vel_arrow.add_attr(xform)
-                vel_arrow.set_color(*Color.GREEN.value, alpha=1)
-
-                geoms.append(vel_arrow)
-
         return geoms

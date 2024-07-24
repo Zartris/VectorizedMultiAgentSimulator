@@ -1259,7 +1259,10 @@ class World(TorchVectorizedObject):
 
     def _cast_rays_to_box(
         self,
-        box: Entity,
+        box_pos,
+        box_rot,
+        box_length,
+        box_width,
         ray_origin: Tensor,
         ray_direction: Tensor,
         max_range: float,
@@ -1269,18 +1272,43 @@ class World(TorchVectorizedObject):
         Computes distance of ray originating from pos at angle to a box and sets distance to
         max_range if there is no intersection.
         """
-        assert ray_origin.ndim == 2 and ray_direction.ndim == 2
-        assert ray_origin.shape[0] == ray_direction.shape[0]
-        assert isinstance(box.shape, Box)
+        batch_size = ray_origin.shape[:-1]
+        assert batch_size[0] == self.batch_dim
+        assert ray_origin.shape[-1] == 2  # ray_origin is [*batch_size, 2]
+        assert (
+            ray_direction.shape[:-1] == batch_size
+        )  # ray_direction is [*batch_size, n_angles]
+        assert box_pos.shape[:-2] == batch_size
+        assert box_pos.shape[-1] == 2
+        assert box_rot.shape[:-1] == batch_size
+        assert box_width.shape[:-1] == batch_size
+        assert box_length.shape[:-1] == batch_size
 
-        num_world, num_angles = ray_direction.shape
+        num_angles = ray_direction.shape[-1]
+        n_boxes = box_pos.shape[-2]
 
-        # Expand ray_origin to [num_world, num_angles, 2]
-        ray_origin = ray_origin.unsqueeze(1).expand(num_world, num_angles, 2)
-
-        # Expand box state variables
-        box_pos_expanded = box.state.pos.unsqueeze(1).expand(num_world, num_angles, 2)
-        box_rot_expanded = box.state.rot.expand(num_world, num_angles)
+        # Expand input to [*batch_size, n_boxes, num_angles, 2]
+        ray_origin = (
+            ray_origin.unsqueeze(-2)
+            .unsqueeze(-2)
+            .expand(*batch_size, n_boxes, num_angles, 2)
+        )
+        box_pos_expanded = box_pos.unsqueeze(-2).expand(
+            *batch_size, n_boxes, num_angles, 2
+        )
+        # Expand input to [*batch_size, n_boxes, num_angles]
+        ray_direction = ray_direction.unsqueeze(-2).expand(
+            *batch_size, n_boxes, num_angles
+        )
+        box_rot_expanded = box_rot.unsqueeze(-1).expand(
+            *batch_size, n_boxes, num_angles
+        )
+        box_width_expanded = box_width.unsqueeze(-1).expand(
+            *batch_size, n_boxes, num_angles
+        )
+        box_length_expanded = box_length.unsqueeze(-1).expand(
+            *batch_size, n_boxes, num_angles
+        )
 
         # Compute pos_origin and pos_aabb
         pos_origin = ray_origin - box_pos_expanded
@@ -1295,14 +1323,14 @@ class World(TorchVectorizedObject):
         ray_dir_aabb = TorchUtils.rotate_vector(ray_dir_world, -box_rot_expanded)
 
         # Calculate tx, ty, tmin, and tmax
-        tx1 = (-box.shape.length / 2 - pos_aabb[..., 0]) / ray_dir_aabb[..., 0]
-        tx2 = (box.shape.length / 2 - pos_aabb[..., 0]) / ray_dir_aabb[..., 0]
+        tx1 = (-box_length_expanded / 2 - pos_aabb[..., X]) / ray_dir_aabb[..., X]
+        tx2 = (box_length_expanded / 2 - pos_aabb[..., X]) / ray_dir_aabb[..., X]
         tx = torch.stack([tx1, tx2], dim=-1)
         tmin, _ = torch.min(tx, dim=-1)
         tmax, _ = torch.max(tx, dim=-1)
 
-        ty1 = (-box.shape.width / 2 - pos_aabb[..., 1]) / ray_dir_aabb[..., 1]
-        ty2 = (box.shape.width / 2 - pos_aabb[..., 1]) / ray_dir_aabb[..., 1]
+        ty1 = (-box_width_expanded / 2 - pos_aabb[..., Y]) / ray_dir_aabb[..., Y]
+        ty2 = (box_width_expanded / 2 - pos_aabb[..., Y]) / ray_dir_aabb[..., Y]
         ty = torch.stack([ty1, ty2], dim=-1)
         tymin, _ = torch.min(ty, dim=-1)
         tymax, _ = torch.max(ty, dim=-1)
@@ -1364,25 +1392,47 @@ class World(TorchVectorizedObject):
 
     def _cast_rays_to_sphere(
         self,
-        sphere: Entity,
+        sphere_pos,
+        sphere_radius,
         ray_origin: Tensor,
         ray_direction: Tensor,
         max_range: float,
     ):
-        num_world, num_angles = ray_direction.shape[0], ray_direction.shape[1]
+        batch_size = ray_origin.shape[:-1]
+        assert batch_size[0] == self.batch_dim
+        assert ray_origin.shape[-1] == 2  # ray_origin is [*batch_size, 2]
+        assert (
+            ray_direction.shape[:-1] == batch_size
+        )  # ray_direction is [*batch_size, n_angles]
+        assert sphere_pos.shape[:-2] == batch_size
+        assert sphere_pos.shape[-1] == 2
+        assert sphere_radius.shape[:-1] == batch_size
 
-        # Expand ray_origin to [num_world, num_angles, 2]
-        ray_origin = ray_origin.unsqueeze(1).expand(num_world, num_angles, 2)
+        num_angles = ray_direction.shape[-1]
+        n_spheres = sphere_pos.shape[-2]
+
+        # Expand input to [*batch_size, n_spheres, num_angles, 2]
+        ray_origin = (
+            ray_origin.unsqueeze(-2)
+            .unsqueeze(-2)
+            .expand(*batch_size, n_spheres, num_angles, 2)
+        )
+        sphere_pos_expanded = sphere_pos.unsqueeze(-2).expand(
+            *batch_size, n_spheres, num_angles, 2
+        )
+        # Expand input to [*batch_size, n_spheres, num_angles]
+        ray_direction = ray_direction.unsqueeze(-2).expand(
+            *batch_size, n_spheres, num_angles
+        )
+        sphere_radius_expanded = sphere_radius.unsqueeze(-1).expand(
+            *batch_size, n_spheres, num_angles
+        )
 
         # Calculate ray_dir_world
         ray_dir_world = torch.stack(
             [torch.cos(ray_direction), torch.sin(ray_direction)], dim=-1
         )
 
-        # Expand test_point_pos to [num_world, num_angles, 2]
-        test_point_pos = sphere.state.pos.unsqueeze(1).expand(num_world, num_angles, 2)
-
-        # Expand line_rot to [num_world, num_angles, 1]
         line_rot = ray_direction.unsqueeze(-1)
 
         # line_length remains scalar and will be broadcasted as needed
@@ -1392,22 +1442,22 @@ class World(TorchVectorizedObject):
         line_pos = ray_origin + ray_dir_world * (line_length / 2)
 
         # Call the updated _get_closest_point_line function
-        closest_point = _get_closest_point_line_vec(
+        closest_point = _get_closest_point_line(
             line_pos,
             line_rot,
             line_length,
-            test_point_pos,
+            sphere_pos_expanded,
             limit_to_line_length=False,
         )
 
         # Calculate distances and other metrics
-        d = test_point_pos - closest_point
+        d = sphere_pos_expanded - closest_point
         d_norm = torch.linalg.vector_norm(d, dim=-1)
-        ray_intersects = d_norm < sphere.shape.radius
-        a = sphere.shape.radius**2 - d_norm**2
+        ray_intersects = d_norm < sphere_radius_expanded
+        a = sphere_radius_expanded**2 - d_norm**2
         m = torch.sqrt(torch.where(a > 0, a, 1e-8))
 
-        u = test_point_pos - ray_origin
+        u = sphere_pos_expanded - ray_origin
         u1 = closest_point - ray_origin
 
         # Dot product of u and u1
@@ -1472,7 +1522,9 @@ class World(TorchVectorizedObject):
 
     def _cast_rays_to_line(
         self,
-        line: Entity,
+        line_pos,
+        line_rot,
+        line_length,
         ray_origin: Tensor,
         ray_direction: Tensor,
         max_range: float,
@@ -1482,29 +1534,48 @@ class World(TorchVectorizedObject):
         Computes distance of ray originating from pos at angle to a line and sets distance to
         max_range if there is no intersection.
         """
-        assert ray_origin.ndim == 2 and ray_direction.ndim == 2
-        assert ray_origin.shape[0] == ray_direction.shape[0]
-        assert isinstance(line.shape, Line)
+        batch_size = ray_origin.shape[:-1]
+        assert batch_size[0] == self.batch_dim
+        assert ray_origin.shape[-1] == 2  # ray_origin is [*batch_size, 2]
+        assert (
+            ray_direction.shape[:-1] == batch_size
+        )  # ray_direction is [*batch_size, n_angles]
+        assert line_pos.shape[:-2] == batch_size
+        assert line_pos.shape[-1] == 2
+        assert line_rot.shape[:-1] == batch_size
+        assert line_length.shape[:-1] == batch_size
 
-        num_world, num_angles = ray_direction.shape
+        num_angles = ray_direction.shape[-1]
+        n_lines = line_pos.shape[-2]
 
-        # Expand ray_origin to [num_world, num_angles, 2]
-        ray_origin = ray_origin.unsqueeze(1).expand(num_world, num_angles, 2)
+        # Expand input to [*batch_size, n_lines, num_angles, 2]
+        ray_origin = (
+            ray_origin.unsqueeze(-2)
+            .unsqueeze(-2)
+            .expand(*batch_size, n_lines, num_angles, 2)
+        )
+        line_pos_expanded = line_pos.unsqueeze(-2).expand(
+            *batch_size, n_lines, num_angles, 2
+        )
+        # Expand input to [*batch_size, n_lines, num_angles]
+        ray_direction = ray_direction.unsqueeze(-2).expand(
+            *batch_size, n_lines, num_angles
+        )
+        line_rot_expanded = line_rot.unsqueeze(-1).expand(
+            *batch_size, n_lines, num_angles
+        )
+        line_length_expanded = line_length.unsqueeze(-1).expand(
+            *batch_size, n_lines, num_angles
+        )
 
         # Expand line state variables
-        p = line.state.pos.unsqueeze(1).expand(num_world, num_angles, 2)
-        r = (
-            torch.stack(
-                [
-                    torch.cos(line.state.rot.squeeze(1)),
-                    torch.sin(line.state.rot.squeeze(1)),
-                ],
-                dim=-1,
-            )
-            .unsqueeze(1)
-            .expand(num_world, num_angles, 2)
-            * line.shape.length
-        )
+        r = torch.stack(
+            [
+                torch.cos(line_rot_expanded),
+                torch.sin(line_rot_expanded),
+            ],
+            dim=-1,
+        ) * line_length_expanded.unsqueeze(-1)
 
         # Calculate q and s
         q = ray_origin
@@ -1518,8 +1589,8 @@ class World(TorchVectorizedObject):
 
         # Calculate rxs, t, u, and d
         rxs = TorchUtils.cross(r, s)
-        t = TorchUtils.cross(q - p, s / rxs)
-        u = TorchUtils.cross(q - p, r / rxs)
+        t = TorchUtils.cross(q - line_pos_expanded, s / rxs)
+        u = TorchUtils.cross(q - line_pos_expanded, r / rxs)
         d = torch.linalg.norm(u * s, dim=-1)
 
         # Handle edge cases
@@ -1576,11 +1647,13 @@ class World(TorchVectorizedObject):
     ):
         pos = entity.state.pos
 
-        assert pos.ndim == 2 and angles.ndim == 2
-        assert pos.shape[0] == angles.shape[0]
-
         # Initialize with full max_range to avoid dists being empty when all entities are filtered
-        dists = [torch.full_like(angles, fill_value=max_range, device=self.device)]
+        dists = torch.full_like(
+            angles, fill_value=max_range, device=self.device
+        ).unsqueeze(-1)
+        boxes = []
+        spheres = []
+        lines = []
         for e in self.entities:
             if entity is e or not entity_filter(e):
                 continue
@@ -1588,63 +1661,108 @@ class World(TorchVectorizedObject):
                 e
             ), "Rays are only casted among collidables"
             if isinstance(e.shape, Box):
-                d = self._cast_rays_to_box(e, pos, angles, max_range)
+                boxes.append(e)
             elif isinstance(e.shape, Sphere):
-                d = self._cast_rays_to_sphere(e, pos, angles, max_range)
+                spheres.append(e)
             elif isinstance(e.shape, Line):
-                d = self._cast_rays_to_line(e, pos, angles, max_range)
+                lines.append(e)
             else:
                 raise RuntimeError(f"Shape {e.shape} currently not handled by cast_ray")
-            dists.append(d)
-        dist, _ = torch.min(torch.stack(dists, dim=-1), dim=-1)
+
+        # Boxes
+        if len(boxes):
+            pos_box = []
+            rot_box = []
+            length_box = []
+            width_box = []
+            for box in boxes:
+                pos_box.append(box.state.pos)
+                rot_box.append(box.state.rot)
+                length_box.append(torch.tensor(box.shape.length, device=self.device))
+                width_box.append(torch.tensor(box.shape.width, device=self.device))
+            pos_box = torch.stack(pos_box, dim=-2)
+            rot_box = torch.stack(rot_box, dim=-2)
+            length_box = (
+                torch.stack(
+                    length_box,
+                    dim=-1,
+                )
+                .unsqueeze(0)
+                .expand(self.batch_dim, -1)
+            )
+            width_box = (
+                torch.stack(
+                    width_box,
+                    dim=-1,
+                )
+                .unsqueeze(0)
+                .expand(self.batch_dim, -1)
+            )
+            dist_boxes = self._cast_rays_to_box(
+                pos_box,
+                rot_box.squeeze(-1),
+                length_box,
+                width_box,
+                pos,
+                angles,
+                max_range,
+            )
+            dists = torch.cat([dists, dist_boxes.transpose(-1, -2)], dim=-1)
+        # Spheres
+        if len(spheres):
+            pos_s = []
+            radius_s = []
+            for s in spheres:
+                pos_s.append(s.state.pos)
+                radius_s.append(torch.tensor(s.shape.radius, device=self.device))
+            pos_s = torch.stack(pos_s, dim=-2)
+            radius_s = (
+                torch.stack(
+                    radius_s,
+                    dim=-1,
+                )
+                .unsqueeze(0)
+                .expand(self.batch_dim, -1)
+            )
+            dist_spheres = self._cast_rays_to_sphere(
+                pos_s,
+                radius_s,
+                pos,
+                angles,
+                max_range,
+            )
+            dists = torch.cat([dists, dist_spheres.transpose(-1, -2)], dim=-1)
+        # Lines
+        if len(lines):
+            pos_l = []
+            rot_l = []
+            length_l = []
+            for line in lines:
+                pos_l.append(line.state.pos)
+                rot_l.append(line.state.rot)
+                length_l.append(torch.tensor(line.shape.length, device=self.device))
+            pos_l = torch.stack(pos_l, dim=-2)
+            rot_l = torch.stack(rot_l, dim=-2)
+            length_l = (
+                torch.stack(
+                    length_l,
+                    dim=-1,
+                )
+                .unsqueeze(0)
+                .expand(self.batch_dim, -1)
+            )
+            dist_lines = self._cast_rays_to_line(
+                pos_l,
+                rot_l.squeeze(-1),
+                length_l,
+                pos,
+                angles,
+                max_range,
+            )
+            dists = torch.cat([dists, dist_lines.transpose(-1, -2)], dim=-1)
+
+        dist, _ = torch.min(dists, dim=-1)
         return dist
-
-    def cast_rays_dist_and_speed(
-        self,
-        entity: Entity,
-        angles: Tensor,
-        max_range: float,
-        entity_filter: Callable[[Entity], bool] = lambda _: False,
-    ):
-        pos = entity.state.pos
-
-        assert pos.ndim == 2 and angles.ndim == 2
-        assert pos.shape[0] == angles.shape[0]
-
-        # Initialize with full max_range to avoid dists being empty when all entities are filtered
-        dists = [torch.full_like(angles, fill_value=max_range, device=self.device)]
-        entity_vel = [torch.zeros((self.batch_dim, 2), device=self.device)]
-        for e in self.entities:
-            if entity is e or not entity_filter(e):
-                continue
-            assert e.collides(entity) and entity.collides(
-                e
-            ), "Rays are only casted among collidables"
-            if isinstance(e.shape, Box):
-                d = self._cast_rays_to_box(e, pos, angles, max_range)
-            elif isinstance(e.shape, Sphere):
-                d = self._cast_rays_to_sphere(e, pos, angles, max_range)
-            elif isinstance(e.shape, Line):
-                d = self._cast_rays_to_line(e, pos, angles, max_range)
-            else:
-                raise RuntimeError(f"Shape {e.shape} currently not handled by cast_ray")
-            dists.append(d)
-            if isinstance(e, Agent):
-                entity_vel.append(e.state.vel)
-            else:
-                entity_vel.append(torch.zeros((self.batch_dim, 2), device=self.device))
-        dist = torch.stack(dists, dim=-1)
-        entity_vel = torch.stack(entity_vel, dim=-2)
-        entity_vel = entity_vel.unsqueeze(1).repeat(
-            1, angles.shape[1], 1, 1
-        )  # [world, rays, entities, 2]
-
-        dist_arg = torch.argmin(dist, dim=-1).unsqueeze(-1)  # [world, rays, 1]
-        dist = torch.gather(dist, -1, dist_arg).squeeze(-1)  # [world, rays]
-        entity_vel = torch.gather(
-            entity_vel, -2, dist_arg.unsqueeze(-1).repeat(1, 1, 1, 2)
-        ).squeeze(-2)
-        return dist, entity_vel
 
     def get_distance_from_point(
         self, entity: Entity, test_point_pos, env_index: int = None
@@ -1976,7 +2094,7 @@ class World(TorchVectorizedObject):
                     frozenset({entity_a.name, entity_b.name}), None
                 )
                 if joint is not None:
-                    joints.append((entity_a, entity_b, joint))
+                    joints.append(joint)
                     if joint.dist == 0:
                         continue
                 if not self.collides(entity_a, entity_b):
@@ -2067,8 +2185,10 @@ class World(TorchVectorizedObject):
             rotate = []
             rot_a = []
             rot_b = []
-
-            for entity_a, entity_b, joint in joints:
+            joint_rot = []
+            for joint in joints:
+                entity_a = joint.entity_a
+                entity_b = joint.entity_b
                 pos_joint_a.append(joint.pos_point(entity_a))
                 pos_joint_b.append(joint.pos_point(entity_b))
                 pos_a.append(entity_a.state.pos)
@@ -2077,6 +2197,13 @@ class World(TorchVectorizedObject):
                 rotate.append(torch.tensor(joint.rotate, device=self.device))
                 rot_a.append(entity_a.state.rot)
                 rot_b.append(entity_b.state.rot)
+                joint_rot.append(
+                    torch.tensor(joint.fixed_rotation, device=self.device)
+                    .unsqueeze(-1)
+                    .expand(self.batch_dim, 1)
+                    if isinstance(joint.fixed_rotation, float)
+                    else joint.fixed_rotation
+                )
             pos_a = torch.stack(pos_a, dim=-2)
             pos_b = torch.stack(pos_b, dim=-2)
             pos_joint_a = torch.stack(pos_joint_a, dim=-2)
@@ -2096,6 +2223,7 @@ class World(TorchVectorizedObject):
                 dim=-1,
             )
             rotate = rotate_prior.unsqueeze(0).expand(self.batch_dim, -1).unsqueeze(-1)
+            joint_rot = torch.stack(joint_rot, dim=-2)
 
             (
                 force_a_attractive,
@@ -2123,7 +2251,7 @@ class World(TorchVectorizedObject):
             torque_b_rotate = TorchUtils.compute_torque(force_b, r_b)
 
             torque_a_fixed, torque_b_fixed = self._get_constraint_torques(
-                rot_a, rot_b, force_multiplier=self._torque_constraint_force
+                rot_a, rot_b + joint_rot, force_multiplier=self._torque_constraint_force
             )
 
             torque_a = torch.where(
@@ -2133,12 +2261,12 @@ class World(TorchVectorizedObject):
                 rotate, torque_b_rotate, torque_b_rotate + torque_b_fixed
             )
 
-            for i, (entity_a, entity_b, _) in enumerate(joints):
+            for i, joint in enumerate(joints):
                 self.update_env_forces(
-                    entity_a,
+                    joint.entity_a,
                     force_a[:, i],
                     torque_a[:, i],
-                    entity_b,
+                    joint.entity_b,
                     force_b[:, i],
                     torque_b[:, i],
                 )
@@ -2704,12 +2832,7 @@ class World(TorchVectorizedObject):
         k = 1
         penetration = k * (torch.exp(abs_delta_rot / k) - 1)
 
-        torque = (
-            force_multiplier
-            * delta_rot
-            / torch.where(abs_delta_rot > 0, abs_delta_rot, 1e-8)
-            * penetration
-        )
+        torque = force_multiplier * delta_rot.sign() * penetration
         torque = torch.where((abs_delta_rot < min_delta_rot), 0.0, torque)
 
         return -torque, torque
