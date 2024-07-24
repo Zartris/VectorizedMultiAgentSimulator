@@ -238,6 +238,7 @@ class ScenarioUtils:
         x_bounds: Tuple[int, int],
         y_bounds: Tuple[int, int],
         occupied_positions: Tensor = None,
+        disable_warn: bool = False,
     ):
         batch_size = world.batch_dim if env_index is None else 1
 
@@ -254,6 +255,7 @@ class ScenarioUtils:
                 min_dist_between_entities,
                 x_bounds,
                 y_bounds,
+                disable_warn,
             )
             occupied_positions = torch.cat([occupied_positions, pos], dim=1)
             entity.set_pos(pos.squeeze(1), batch_index=env_index)
@@ -266,11 +268,13 @@ class ScenarioUtils:
         min_dist_between_entities: float,
         x_bounds: Tuple[int, int],
         y_bounds: Tuple[int, int],
+        disable_warn: bool = False,
         max_tries=10_000,  # prevent ever-lasting loop if world is too tight
     ):
         batch_size = world.batch_dim if env_index is None else 1
 
         pos = None
+        tries = 0
         while max_tries > 0:
             proposed_pos = torch.cat(
                 [
